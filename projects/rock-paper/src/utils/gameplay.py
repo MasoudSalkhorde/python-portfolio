@@ -14,5 +14,5 @@ class GamePlay():
             return "rock"
         elif "rock" in self.selection and "paper" in self.selection:
             return "paper"
-        elif "payper" in self.selection and "scisors" in self.selection:
+        elif "paper" in self.selection and "scisors" in self.selection:
             return "scisors"
