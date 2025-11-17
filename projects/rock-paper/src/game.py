@@ -9,7 +9,7 @@ computer = Player()
 print("Welcome to the game!\n")
 counter = 1
 
-while player.score < 3 and computer.score < 3:
+while True:
 
     print(f'This is the {counter} round of the game.\n')
     
@@ -39,11 +39,28 @@ while player.score < 3 and computer.score < 3:
         print("\nInvalid input. Try again!\n")
         continue
     
-if computer.score == 3:
-    print("Computer won!")
-else:
-    print("You won!")
+    if computer.score == 3:
+        print("Computer won!")
+        to_continue = input("Do you want to play again? y/n: ")
+        if to_continue == "y":
+            counter = 1
+            player.score = 0
+            computer.score = 0
+            continue
+        else:
+            print("Thank you for playting the game")
+            break
+    elif player.score ==3:
+        print("You won!")
+        to_continue = input("Do you want to play again? y/n: ")
+        if to_continue == "y":
+            counter = 1
+            player.score = 0
+            computer.score = 0
+            continue
+        else:
+            print("Thank you for playting the game")
+            break
+    
+    
 
-    
-    
-    
