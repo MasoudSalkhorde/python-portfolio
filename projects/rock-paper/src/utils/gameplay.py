@@ -1,6 +1,13 @@
 class GamePlay():
 
     def __init__(self, player_choice, computer_choice):
+        """_summary_
+
+        :param player_choice: _description_
+        :type player_choice: _type_
+        :param computer_choice: _description_
+        :type computer_choice: _type_
+        """
         self.player_choice = player_choice.lower()
         self.computer_choice = computer_choice.lower()
         self.selection = []
