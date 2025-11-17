@@ -19,12 +19,12 @@ while True:
         computer_choice = computer.random_choice()
         manager = GamePlay(user_choice, computer_choice)
         print(f'\nThe computer chose: {computer_choice}\n')
-
-        if manager.find_winner() == "tie":
+        result = manager.find_winner()
+        if result == "tie":
             print('This is a tie!\n')
             counter += 1
             continue
-        elif manager.find_winner() == user_choice:
+        elif result == user_choice:
             player.win()
         else:
             computer.win()
