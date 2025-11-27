@@ -1,4 +1,3 @@
-from src.password_classes.password_generator import PasswordGenerator
 from src.password_classes.random_password import RandomGenerator
 from src.password_classes.pin_password import PinGenerator
 from src.password_classes.memorable_password import MemorableGenerator
