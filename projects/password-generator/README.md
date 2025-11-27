@@ -26,14 +26,15 @@ This tool allows users to generate secure, random passwords based on selected cr
 password-generator/
 │── src/
 │   └── main.py
+│   └── password_classes
 │── README.md
 │── requirements.txt
 ```
 
 ## 📦 Requirements
 
-Python 3.6+
-(You can keep requirements.txt empty since no external packages are needed.)
+- Python 3.6+
+- nltk 3.9.2
 
 ## 📄 License
 
