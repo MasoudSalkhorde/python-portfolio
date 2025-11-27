@@ -5,6 +5,8 @@ from src.password_classes.memorable_password import MemorableGenerator
 
 
 def str_to_bool(value: str) -> bool:
+    """Takes a string and returns a boolean
+    """
     value = value.strip().lower()
     return value in ("true", "t", "yes", "y", "1")
 

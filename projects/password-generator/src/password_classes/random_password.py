@@ -3,6 +3,8 @@ import string
 from src.password_classes.password_generator import PasswordGenerator
 
 class RandomGenerator(PasswordGenerator):
+    """Subclass of PasswordGenerator to generate random passwords using letters, signs, and numbers.
+    """
     def __init__(self):
         super().__init__()
         self.numbers = "0123456789"
@@ -10,6 +12,15 @@ class RandomGenerator(PasswordGenerator):
         self.symbols = string.punctuation
 
     def generate(self, length: int = 16, use_numbers: bool = False, use_symbols: bool = False) -> str:
+        """Generates a random password using letters, signs, and numbers.
+
+        :param length: Length of the password, defaults to 16
+        :type length: int, optional
+        :param use_numbers: User preference to include numbers in the password, defaults to False
+        :type use_numbers: bool, optional
+        :param use_symbols: User preference to include symbols in the password, defaults to False
+        :type use_symbols: bool, optional
+        """
         if length < 1:
             raise ValueError("Password length must be at least 1")
 
