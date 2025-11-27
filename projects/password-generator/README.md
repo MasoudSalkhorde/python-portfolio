@@ -35,6 +35,7 @@ password-generator/
 
 - Python 3.6+
 - nltk 3.9.2
+- streamlit 1.51.0
 
 ## 📄 License
 
