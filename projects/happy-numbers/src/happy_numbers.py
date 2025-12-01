@@ -1,4 +1,9 @@
 def is_happy(n: int) -> bool:
+    """Checks if a number is a happy number
+
+    :param n: The number to check
+    :return: Returns True if the number is happy
+    """
     seen = set()  # hash set to store visited numbers
 
     while n != 1:
@@ -18,3 +23,8 @@ if is_happy(number_to_check):
     print("The number is a happy number")
 else:
     print("This is not a happy number")
+    
+
+if __name__ == '__main__':
+    assert is_happy(7) is True
+    assert is_happy(45) is False
