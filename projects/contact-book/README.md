@@ -43,7 +43,8 @@ contact-book/
    ├─ main.py
    ├─ contact.py
    ├─ contact_book.py
-   └─ storage.py
+   └─ utils/
+        └─contant.py
 ```
 ## Getting Started
 Clone and run
