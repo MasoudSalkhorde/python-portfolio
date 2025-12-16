@@ -6,15 +6,11 @@ A simple **CLI Contact Book** built in Python that lets you **add, view, search,
 
 ## Features
 
-- ✅ Add a contact (name, phone, email, address, tags, notes)
-- ✅ List all contacts (sorted)
-- ✅ Search contacts (by name / phone / email / tags)
+- ✅ Add a contact (name, phone, email)
+- ✅ View all contacts 
 - ✅ Update a contact
 - ✅ Delete a contact
 - ✅ Prevent duplicates (configurable)
-- ✅ Save/load contacts automatically (JSON)
-- ✅ Export to CSV / Import from CSV
-
 ---
 
 ## Demo (example)
@@ -22,13 +18,10 @@ A simple **CLI Contact Book** built in Python that lets you **add, view, search,
 ```bash
 $ python -m src.main
 1) Add contact
-2) List contacts
-3) Search
-4) Update
-5) Delete
-6) Import CSV
-7) Export CSV
-0) Exit
+2) View contacts
+3) Update
+4) Delete
+5) Exit
 ```
 
 ## Project Structure
@@ -41,15 +34,13 @@ contact-book/
 │  └─ contacts.json
 └─ src/
    ├─ main.py
-   ├─ contact.py
-   ├─ contact_book.py
    └─ utils/
-        └─contant.py
+        └─contant_book.py
 ```
 ## Getting Started
 Clone and run
 ```
-git clone <your-repo-url>
+git clone https://github.com/MasoudSalkhorde/python-portfolio/tree/main/projects
 cd contact-book
 python -m src.main
 ```
