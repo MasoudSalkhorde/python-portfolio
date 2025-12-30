@@ -1,0 +1,29 @@
+# --- private docs ---
+**/*.pdf
+**/*.docx
+**/*.doc
+**/*.rtf
+
+# --- resume agent outputs ---
+outputs/
+src/outputs/
+data/
+private/
+secrets/
+
+# --- data ---
+src/data/
+
+# --- env / keys ---
+.env
+.env.*
+**/.env
+
+# --- python junk ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+.DS_Store

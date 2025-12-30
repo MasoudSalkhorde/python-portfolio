@@ -1,4 +1,4 @@
-from schemas import ResumeJSON, TailoredResumeJSON
+from src.utils.schemas import ResumeJSON, TailoredResumeJSON
 
 def validate_tailored_resume(resume: ResumeJSON, tailored: TailoredResumeJSON) -> None:
     valid_ids = {b.id for r in resume.roles for b in r.bullets}

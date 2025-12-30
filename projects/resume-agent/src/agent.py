@@ -1,18 +1,30 @@
 import json
 from typing import Type, TypeVar
-from schemas import (
+from src.utils.schemas import (
     JobDescriptionJSON, ResumeJSON, MatchJSON, TailoredResumeJSON
 )
-from io_pdf import pdf_to_text
+from src.utils.io_pdf import pdf_to_text
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 T = TypeVar("T")
 
 def call_llm(prompt: str) -> str:
-    """
-    Replace this with your model call.
-    Must return raw text that is JSON (no markdown).
-    """
-    raise NotImplementedError
+    response = client.chat.completions.create(
+        model="gpt-5.1",  # or gpt-4.1 / gpt-4o-mini
+        messages=[
+            {"role": "system", "content": "You are a precise JSON-only generator."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
+    )
+    return response.choices[0].message.content.strip()
 
 def llm_to_schema(prompt: str, schema: Type[T]) -> T:
     raw = call_llm(prompt)
@@ -22,7 +34,7 @@ def llm_to_schema(prompt: str, schema: Type[T]) -> T:
 def run_pipeline(jd_text: str, resume_pdf_path: str) -> TailoredResumeJSON:
     resume_text = pdf_to_text(resume_pdf_path)
 
-    from prompts import (
+    from src.utils.prompts import (
         prompt_extract_jd,
         prompt_extract_resume,
         prompt_match,
@@ -35,12 +47,14 @@ def run_pipeline(jd_text: str, resume_pdf_path: str) -> TailoredResumeJSON:
     tailored = llm_to_schema(prompt_tailor(jd, resume, match), TailoredResumeJSON)
 
     # validators.py checks
-    from validators import validate_tailored_resume
+    from src.utils.validators import validate_tailored_resume
     validate_tailored_resume(resume, tailored)
 
     return tailored
 
 if __name__ == "__main__":
-    JD_TEXT = open("jd.txt", "r", encoding="utf-8").read()
-    out = run_pipeline(JD_TEXT, "/mnt/data/250_EA.pdf")
-    print(out.model_dump_json(indent=2))
+    JD_TEXT = open("./src/data/jd.txt", "r", encoding="utf-8").read()
+    tailored = run_pipeline(JD_TEXT, "./src/data/250_EA.pdf")
+
+    with open("outputs/tailored_resume.json", "w") as f:
+        f.write(tailored.model_dump_json(indent=2))
