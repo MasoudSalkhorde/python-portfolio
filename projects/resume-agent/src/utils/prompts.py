@@ -10,8 +10,8 @@ def prompt_extract_jd(jd_text: str) -> str:
     return f"""
 {_json_only_rule()}
 
-You are extracting a mobile app UA leadership job description into structured JSON.
-Include responsibilities, requirements (must/nice), networks/tools, and key metrics.
+You are extracting a job description into structured JSON.
+Include responsibilities, requirements (must/nice), all of the networks/tools/technical skills sorted by importance, and all of the key metrics sorted by importance.
 
 JD TEXT:
 {jd_text}
@@ -94,14 +94,40 @@ def prompt_tailor(jd, resume, match) -> str:
     return f"""
 {_json_only_rule()}
 
-Tailor the resume for this job.
-Rules:
-1) NEVER invent facts, titles, tools, budgets, employers, dates, education, certifications, or people-management scope.
-2) Every tailored bullet MUST include source_bullet_ids that exist in RESUME JSON.
-3) Optimize for ATS + Director/Head of UA language: strategy, governance, experimentation, P&L, forecasting, exec reporting, partner management.
-4) Emphasize: multi-million budgets, ROAS/LTV modeling, channel expansion, dashboards/analytics, cross-functional work.
-5) If a JD need is missing, do NOT add it; put it into questions_for_user.
+You are tailoring the resume for this job by REWRITING WORK EXPERIENCE BULLETS.
+Your goal is to maximize alignment with the job description:
 
+HARD RULES:titles
+1) NEVER invent budgets, employers, dates, education, certifications.
+2) You MAY rephrase, merge, split, and reorder bullets.
+3) You MAY create a NEW bullet ONLY if you can anchor it using metrics/outcomes already present in the resume bullets.
+4) Preserve metrics exactly as they appear in RESUME JSON (do not change numbers, currency, %).
+5) You can modify the titles a little bit to align with the JD
+
+PRIMARY OBJECTIVE:
+- Ensure the tailored bullets collectively cover ALL key responsibilities + qualifications in the job description as much as possible.
+
+PRIORITY EMPHASIS (CRITICAL):
+A) For the FIRST TWO ROLES in RESUME JSON (most recent two roles):
+   - Rewrite 4–6 bullets per role.
+   - These bullets must be explicitly designed to cover the FIRST 4–5 responsibilities in the JD responsibilities list
+   - METHOD:
+     - First try to "mix and match" each of those JD responsibilities with the closest existing resume bullets.
+     - If not possible, still write a bullet aligned to the JD responsibility, but anchor it with the KPIs/metrics/outcomes/tools from the most relevant resume bullets.
+     - If not supportable, claim it; but this piece of text at the end of it to let the user know that you added a new bullet : <<new bullet>>
+
+B) For ALL REMAINING ROLES (3rd role and earlier):
+   - Rewrite 3–5 bullets per role.
+   - Use ALL JD responsibilities + qualifications and pick the best matches.
+   - Rewrite bullets to include JD language + resume outcomes/metrics/tools, always citing source_bullet_ids.
+
+STYLE:
+- Director/Head of UA language: strategy, governance, experimentation, forecasting, performance measurement, partner management, executive reporting.
+- 1–2 lines max per bullet; impact-first; metric-forward.
+- Use UA vocabulary: ROAS, LTV, CPI, cohorts, creative testing, channel exploration, dashboards, attribution.
+- Avoid vague filler like "responsible for" or "helped".
+
+INPUTS:
 JOB JSON:
 {jd.model_dump_json()}
 
@@ -111,7 +137,7 @@ RESUME JSON:
 MATCH JSON:
 {match.model_dump_json()}
 
-Output JSON schema:
+OUTPUT JSON schema (MUST MATCH EXACTLY):
 {{
   "tailored_headline":"",
   "tailored_summary":["..."],
@@ -125,6 +151,7 @@ Output JSON schema:
     }}
   ],
   "change_log":["..."],
-  "questions_for_user":["..."]
+  "questions_for_user":["..."],
+  "gaps_to_confirm":["..."]
 }}
 """.strip()

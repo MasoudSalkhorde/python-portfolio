@@ -17,7 +17,7 @@ T = TypeVar("T")
 
 def call_llm(prompt: str) -> str:
     response = client.chat.completions.create(
-        model="gpt-5.1",  # or gpt-4.1 / gpt-4o-mini
+        model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o-mini
         messages=[
             {"role": "system", "content": "You are a precise JSON-only generator."},
             {"role": "user", "content": prompt},
