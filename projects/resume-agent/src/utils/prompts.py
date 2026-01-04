@@ -115,11 +115,14 @@ A) For the FIRST TWO ROLES in RESUME JSON (most recent two roles):
      - First try to "mix and match" each of those JD responsibilities with the closest existing resume bullets.
      - If not possible, still write a bullet aligned to the JD responsibility, but anchor it with the KPIs/metrics/outcomes/tools from the most relevant resume bullets.
      - If not supportable, claim it; but this piece of text at the end of it to let the user know that you added a new bullet : <<new bullet>>
+     - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
 
 B) For ALL REMAINING ROLES (3rd role and earlier):
    - Rewrite 3–5 bullets per role.
    - Use ALL JD responsibilities + qualifications and pick the best matches.
    - Rewrite bullets to include JD language + resume outcomes/metrics/tools, always citing source_bullet_ids.
+   - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
+
 
 STYLE:
 - Director/Head of UA language: strategy, governance, experimentation, forecasting, performance measurement, partner management, executive reporting.
