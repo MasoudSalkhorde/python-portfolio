@@ -120,7 +120,7 @@ A) For the FIRST TWO ROLES in RESUME JSON (most recent two roles):
 B) For ALL REMAINING ROLES (3rd role and earlier):
    - Rewrite 3–5 bullets per role.
    - Use ALL JD responsibilities + qualifications and pick the best matches.
-   - Rewrite bullets to include JD language + resume outcomes/metrics/tools, always citing source_bullet_ids.
+   - Rewrite bullets to include JD language + resume outcomes/metrics/tools. Every bullet MUST include source_bullet_ids. If it’s a new bullet, use an empty array: source_bullet_ids: [].
    - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
 
 
