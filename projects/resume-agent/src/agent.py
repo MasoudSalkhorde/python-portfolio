@@ -4,6 +4,7 @@ from src.utils.schemas import (
     JobDescriptionJSON, ResumeJSON, MatchJSON, TailoredResumeJSON
 )
 from src.utils.io_pdf import pdf_to_text
+from src.utils.resume_selector import choose_resume_pdf
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -31,8 +32,14 @@ def llm_to_schema(prompt: str, schema: Type[T]) -> T:
     data = json.loads(raw)
     return schema.model_validate(data)
 
-def run_pipeline(jd_text: str, resume_pdf_path: str) -> TailoredResumeJSON:
-    resume_text = pdf_to_text(resume_pdf_path)
+def run_pipeline(jd_text: str) -> TailoredResumeJSON:
+    best_resume, scores = choose_resume_pdf(jd_text)
+
+    print("\nSelected base resume:", best_resume.label)
+    print("Resume scores:", scores)
+    print("Using PDF:", best_resume.path)
+
+    resume_text = pdf_to_text(best_resume.path)
 
     from src.utils.prompts import (
         prompt_extract_jd,
@@ -54,7 +61,7 @@ def run_pipeline(jd_text: str, resume_pdf_path: str) -> TailoredResumeJSON:
 
 if __name__ == "__main__":
     JD_TEXT = open("./src/data/jd.txt", "r", encoding="utf-8").read()
-    tailored = run_pipeline(JD_TEXT, "./src/data/250_EA.pdf")
+    tailored = run_pipeline(JD_TEXT)
 
     with open("outputs/tailored_resume.json", "w") as f:
         f.write(tailored.model_dump_json(indent=2))

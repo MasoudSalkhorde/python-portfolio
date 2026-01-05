@@ -37,7 +37,6 @@ Extract this resume into structured JSON.
 IMPORTANT:
 - Create bullet IDs in format "<companykey>_<n>" e.g. "aylo_1".
 - Preserve metrics exactly (e.g., "$10M+/y", "CPI -30%", "LTV +45%").
-- Do not infer people management if not stated.
 
 RESUME TEXT:
 {resume_text}
@@ -100,27 +99,27 @@ Your goal is to maximize alignment with the job description:
 HARD RULES:titles
 1) NEVER invent budgets, employers, dates, education, certifications.
 2) You MAY rephrase, merge, split, and reorder bullets.
-3) You MAY create a NEW bullet ONLY if you can anchor it using metrics/outcomes already present in the resume bullets.
+3) You MAY create a NEW bullet. In that case try to anchor it to the metrics/outcomes already present in the resume bullets if it makes sense.
 4) Preserve metrics exactly as they appear in RESUME JSON (do not change numbers, currency, %).
-5) You can modify the titles a little bit to align with the JD
+5) You can modify the role titles a little bit to align with the JD
 
 PRIMARY OBJECTIVE:
 - Ensure the tailored bullets collectively cover ALL key responsibilities + qualifications in the job description as much as possible.
 
 PRIORITY EMPHASIS (CRITICAL):
 A) For the FIRST TWO ROLES in RESUME JSON (most recent two roles):
-   - Rewrite 4–6 bullets per role.
+   - Rewrite 5–6 bullets per role.
    - These bullets must be explicitly designed to cover the FIRST 4–5 responsibilities in the JD responsibilities list
    - METHOD:
      - First try to "mix and match" each of those JD responsibilities with the closest existing resume bullets.
-     - If not possible, still write a bullet aligned to the JD responsibility, but anchor it with the KPIs/metrics/outcomes/tools from the most relevant resume bullets.
-     - If not supportable, claim it; but this piece of text at the end of it to let the user know that you added a new bullet : <<new bullet>>
+     - If not possible, still write a bullet aligned to the JD responsibility, and try to anchor it with the KPIs/metrics/outcomes/tools from the most relevant resume bullets.
+     - If not supportable, claim it; but this piece of text at the end of it to let the user know that you added a new bullet and make it bold : <<new bullet>>
      - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
 
 B) For ALL REMAINING ROLES (3rd role and earlier):
-   - Rewrite 3–5 bullets per role.
+   - Rewrite 5 bullets per role.
    - Use ALL JD responsibilities + qualifications and pick the best matches.
-   - Rewrite bullets to include JD language + resume outcomes/metrics/tools. Every bullet MUST include source_bullet_ids. If it’s a new bullet, use an empty array: source_bullet_ids: [].
+   - Rewrite bullets to include JD language + resume outcomes/metrics/tools. 
    - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
 
 
