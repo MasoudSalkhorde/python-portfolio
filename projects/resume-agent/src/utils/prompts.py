@@ -114,7 +114,7 @@ A) For the FIRST TWO ROLES in RESUME JSON (most recent two roles):
      - First try to "mix and match" each of those JD responsibilities with the closest existing resume bullets.
      - If not possible, still write a bullet aligned to the JD responsibility, and try to anchor it with the KPIs/metrics/outcomes/tools from the most relevant resume bullets.
      - If not supportable, claim it; but this piece of text at the end of it to let the user know that you added a new bullet and make it bold : <<new bullet>>
-     - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
+     - In all of the scenarios above, paraphrase the JD and try not to use the exact language in the JD except for the professional words or jargons related to the role 
 
 B) For ALL REMAINING ROLES (3rd role and earlier):
    - Rewrite 5 bullets per role.
@@ -149,11 +149,30 @@ OUTPUT JSON schema (MUST MATCH EXACTLY):
       "company":"",
       "title":"",
       "dates":"",
-      "bullets":[{{"text":"", "source_bullet_ids":["..."]}}]
+      "bullets":[
+        {{
+          "text":"",
+          "source_bullet_ids":["..."],
+          "needs_revision": false,
+          "revision_note": null
+        }}
+      ]
     }}
   ],
   "change_log":["..."],
   "questions_for_user":["..."],
   "gaps_to_confirm":["..."]
 }}
+
+IMPORTANT REVISION LOGIC:
+- For each bullet you create, assess if it's significantly far off from the original resume content.
+- If a bullet contains information that cannot be reasonably inferred or derived from the original resume bullets (even with creative interpretation), set "needs_revision": true.
+- When "needs_revision": true, add a "revision_note" explaining what information is new/unverified and why it needs user review.
+- Examples of when to flag for revision:
+  * New technologies/tools not mentioned in original resume
+  * New responsibilities that don't align with the role's scope in the original resume
+  * New metrics/numbers that weren't in the original
+  * New companies/partners not mentioned
+  * Skills or achievements that are completely new
+- Be conservative: if you're unsure whether something can be inferred from the resume, flag it for revision.
 """.strip()

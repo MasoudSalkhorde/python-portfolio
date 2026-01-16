@@ -56,6 +56,8 @@ class MatchJSON(BaseModel):
 class TailoredBullet(BaseModel):
     text: str
     source_bullet_ids: List[str]  # provenance
+    needs_revision: bool = False  # True if bullet is far off from original resume
+    revision_note: Optional[str] = None  # Note explaining why revision is needed
 
 class TailoredRole(BaseModel):
     company: str
@@ -70,3 +72,4 @@ class TailoredResumeJSON(BaseModel):
     tailored_roles: List[TailoredRole]
     change_log: List[str]
     questions_for_user: List[str]
+    gaps_to_confirm: List[str] = Field(default_factory=list)  # Gaps that need user confirmation
