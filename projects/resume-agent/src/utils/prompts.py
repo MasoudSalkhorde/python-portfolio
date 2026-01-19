@@ -11,7 +11,7 @@ def prompt_extract_jd(jd_text: str) -> str:
 {_json_only_rule()}
 
 You are extracting a job description into structured JSON.
-Include responsibilities, requirements (must/nice), all of the networks/tools/technical skills sorted by importance, and all of the key metrics sorted by importance.
+Extract: responsibilities (in order of importance), requirements (must/nice), tools/platforms, and key metrics.
 
 JD TEXT:
 {jd_text}
@@ -24,8 +24,9 @@ Output JSON schema:
   "location": "",
   "responsibilities": ["..."],
   "requirements": [{{"requirement":"", "type":"must|nice", "category":"", "keywords":["..."]}}],
-  "networks_tools": ["Meta", "Google App Campaigns", "TikTok", "AppLovin", "..."],
-  "metrics": ["ROAS", "LTV", "CPI", "Retention", "..."]
+  "networks_tools": ["..."],
+  "metrics": ["..."],
+  "priority_keywords": ["..."]
 }}
 """.strip()
 
@@ -34,9 +35,9 @@ def prompt_extract_resume(resume_text: str) -> str:
 {_json_only_rule()}
 
 Extract this resume into structured JSON.
-IMPORTANT:
 - Create bullet IDs in format "<companykey>_<n>" e.g. "aylo_1".
-- Preserve metrics exactly (e.g., "$10M+/y", "CPI -30%", "LTV +45%").
+- Preserve ALL metrics exactly (e.g., "$10M+/y", "CPI -30%", "LTV +45%").
+- Keep company names EXACTLY as they appear.
 
 RESUME TEXT:
 {resume_text}
@@ -55,7 +56,7 @@ Output JSON schema:
       "title": "",
       "dates": "",
       "location": "",
-      "bullets": [{{"id":"", "text":"", "evidence_tags":["budget","testing","roas","dashboards","partners","leadership"]}}]
+      "bullets": [{{"id":"", "text":"", "evidence_tags":["..."]}}]
     }}
   ],
   "education": ["..."],
@@ -68,12 +69,7 @@ def prompt_match(jd, resume) -> str:
     return f"""
 {_json_only_rule()}
 
-You are matching a Job Description to a Resume.
-For each JD requirement:
-- list best matching resume bullet IDs (can be empty)
-- set strength: strong/medium/weak/missing
-- add notes if needed
-Also output: priority_keywords and gaps.
+Match JD requirements to resume bullets. For each JD requirement, find matching resume bullets.
 
 JOB JSON:
 {jd.model_dump_json()}
@@ -93,43 +89,40 @@ def prompt_tailor(jd, resume, match) -> str:
     return f"""
 {_json_only_rule()}
 
-You are tailoring the resume for this job by REWRITING WORK EXPERIENCE BULLETS.
-Your goal is to maximize alignment with the job description:
+You are tailoring the resume to match the job description. 
 
-HARD RULES:titles
-1) NEVER invent budgets, employers, dates, education, certifications.
-2) You MAY rephrase, merge, split, and reorder bullets.
-3) You MAY create a NEW bullet. In that case try to anchor it to the metrics/outcomes already present in the resume bullets if it makes sense.
-4) Preserve metrics exactly as they appear in RESUME JSON (do not change numbers, currency, %).
-5) You can modify the role titles a little bit to align with the JD
+=== ABSOLUTE RULES (NEVER VIOLATE) ===
+1. Company names: Use EXACT names from RESUME JSON. NEVER change, add to, or modify company names.
+2. Dates: Keep EXACT dates from RESUME JSON.
+3. Metrics: Keep EXACT numbers from RESUME JSON (never invent metrics).
+4. Number of roles: Keep the SAME number of roles as in RESUME JSON.
 
-PRIMARY OBJECTIVE:
-- Ensure the tailored bullets collectively cover ALL key responsibilities + qualifications in the job description as much as possible.
+=== GOAL ===
+Rewrite the resume bullets to align with the job description responsibilities, while keeping company names and dates unchanged.
 
-PRIORITY EMPHASIS (CRITICAL):
-A) For the FIRST TWO ROLES in RESUME JSON (most recent two roles):
-   - Rewrite 5–6 bullets per role.
-   - These bullets must be explicitly designed to cover the FIRST 4–5 responsibilities in the JD responsibilities list
-   - METHOD:
-     - First try to "mix and match" each of those JD responsibilities with the closest existing resume bullets.
-     - If not possible, still write a bullet aligned to the JD responsibility, and try to anchor it with the KPIs/metrics/outcomes/tools from the most relevant resume bullets.
-     - If not supportable, claim it; but this piece of text at the end of it to let the user know that you added a new bullet and make it bold : <<new bullet>>
-     - In all of the scenarios above, paraphrase the JD and try not to use the exact language in the JD except for the professional words or jargons related to the role 
+=== STRUCTURE ===
+FIRST ROLE (most recent): 5-7 bullets covering the top 4-5 JD responsibilities
+- First bullet: Must address the #1 JD responsibility with an outcome
+- Second bullet: Must address another top JD responsibility with an outcome
+- Mix/match JD responsibilities into bullets for coverage
 
-B) For ALL REMAINING ROLES (3rd role and earlier):
-   - Rewrite 5 bullets per role.
-   - Use ALL JD responsibilities + qualifications and pick the best matches.
-   - Rewrite bullets to include JD language + resume outcomes/metrics/tools. 
-   - In all of the scnarios above, parahrase the JD and try not to use the exact language in the JD except for the profossional words or jargons related to the role 
+SECOND ROLE: 5-6 bullets covering the next important JD responsibilities
 
+OTHER ROLES: 5 bullets each, covering remaining JD responsibilities
 
-STYLE:
-- Director/Head of UA language: strategy, governance, experimentation, forecasting, performance measurement, partner management, executive reporting.
-- 1–2 lines max per bullet; impact-first; metric-forward.
-- Use UA vocabulary: ROAS, LTV, CPI, cohorts, creative testing, channel exploration, dashboards, attribution.
-- Avoid vague filler like "responsible for" or "helped".
+=== OUTCOME RULES ===
+- 2-4 bullets per role should have outcomes (metrics, percentages, numbers)
+- At least 1 bullet per role should have NO outcome (describes responsibility only)
+- Use outcomes from the original RESUME JSON when possible
+- If you invent an outcome, set needs_revision=true with a note explaining what was invented
 
-INPUTS:
+=== WRITING STYLE ===
+- Write naturally, like a real person describing their work
+- Use JD keywords naturally (for ATS matching)
+- Paraphrase JD language - don't copy exact sentences
+- Vary action verbs and sentence structures
+
+=== INPUTS ===
 JOB JSON:
 {jd.model_dump_json()}
 
@@ -139,40 +132,30 @@ RESUME JSON:
 MATCH JSON:
 {match.model_dump_json()}
 
-OUTPUT JSON schema (MUST MATCH EXACTLY):
+=== OUTPUT (Must match exactly) ===
 {{
-  "tailored_headline":"",
-  "tailored_summary":["..."],
-  "tailored_skills":["..."],
-  "tailored_roles":[
+  "tailored_headline": "[Role-aligned headline]",
+  "tailored_summary": ["...", "..."],
+  "tailored_skills": ["...", "..."],
+  "tailored_roles": [
     {{
-      "company":"",
-      "title":"",
-      "dates":"",
-      "bullets":[
+      "company": "[EXACT company name from RESUME JSON - DO NOT MODIFY]",
+      "title": "[Can adjust slightly to match JD role]",
+      "dates": "[EXACT dates from RESUME JSON]",
+      "bullets": [
         {{
-          "text":"",
-          "source_bullet_ids":["..."],
+          "text": "[Tailored bullet text]",
+          "source_bullet_ids": ["original_bullet_id"],
           "needs_revision": false,
           "revision_note": null
         }}
       ]
     }}
   ],
-  "change_log":["..."],
-  "questions_for_user":["..."],
-  "gaps_to_confirm":["..."]
+  "change_log": ["..."],
+  "questions_for_user": ["..."],
+  "gaps_to_confirm": ["..."]
 }}
 
-IMPORTANT REVISION LOGIC:
-- For each bullet you create, assess if it's significantly far off from the original resume content.
-- If a bullet contains information that cannot be reasonably inferred or derived from the original resume bullets (even with creative interpretation), set "needs_revision": true.
-- When "needs_revision": true, add a "revision_note" explaining what information is new/unverified and why it needs user review.
-- Examples of when to flag for revision:
-  * New technologies/tools not mentioned in original resume
-  * New responsibilities that don't align with the role's scope in the original resume
-  * New metrics/numbers that weren't in the original
-  * New companies/partners not mentioned
-  * Skills or achievements that are completely new
-- Be conservative: if you're unsure whether something can be inferred from the resume, flag it for revision.
+CRITICAL: The company field must be the EXACT string from RESUME JSON. Copy it exactly - no additions, no modifications, no parenthetical notes.
 """.strip()

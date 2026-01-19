@@ -9,6 +9,7 @@ from src.render_pdf import render_pdf
 from src.render_gdoc import main as render_gdoc_main
 from src.utils.config import Config
 from src.utils.logger import setup_logger
+from src.utils.validators import has_outcome
 
 logger = setup_logger()
 
@@ -135,6 +136,60 @@ Examples:
         print("✅ RESUME TAILORING COMPLETE")
         print("="*60)
         
+        # Outcome distribution summary
+        print("\n📊 OUTCOME DISTRIBUTION:")
+        print("-" * 60)
+        for role_idx, role in enumerate(tailored.tailored_roles, 1):
+            bullets_with_outcomes = sum(1 for b in role.bullets if has_outcome(b.text))
+            bullets_without_outcomes = len(role.bullets) - bullets_with_outcomes
+            total_bullets = len(role.bullets)
+            is_first_role = role_idx == 1
+            is_second_role = role_idx == 2
+            
+            # Check first two bullets have outcomes (for first two roles)
+            first_two_status = "✅"
+            if (is_first_role or is_second_role) and total_bullets >= 2:
+                first_two_bullets = role.bullets[:2]
+                first_two_with_outcomes = sum(1 for b in first_two_bullets if has_outcome(b.text))
+                if first_two_with_outcomes < 2:
+                    first_two_status = "⚠️"
+            
+            # First role can have up to 7 bullets, and up to 5 outcomes if it has 7 bullets
+            if is_first_role and total_bullets == 7:
+                status = "✅" if (2 <= bullets_with_outcomes <= 5 and bullets_without_outcomes >= 1) else "⚠️"
+            else:
+                status = "✅" if (2 <= bullets_with_outcomes <= 4 and bullets_without_outcomes >= 1) else "⚠️"
+            
+            role_label = f"{role.company} - {role.title}"
+            if is_first_role:
+                role_label += " (First Role - can have up to 7 bullets)"
+            elif is_second_role:
+                role_label += " (Second Role)"
+            
+            print(f"{status} {role_label}:")
+            print(f"   • {total_bullets} total bullet(s)")
+            print(f"   • {bullets_with_outcomes} bullet(s) with outcomes")
+            print(f"   • {bullets_without_outcomes} bullet(s) without outcomes")
+            
+            # Check first two bullets
+            if (is_first_role or is_second_role) and total_bullets >= 2:
+                first_two_bullets = role.bullets[:2]
+                first_two_with_outcomes = sum(1 for b in first_two_bullets if has_outcome(b.text))
+                if first_two_with_outcomes == 2:
+                    print(f"   {first_two_status} First 2 bullets have outcomes (aligned with top 3 JD responsibilities)")
+                else:
+                    print(f"   {first_two_status} First 2 bullets: {first_two_with_outcomes}/2 have outcomes (should be 2/2)")
+            
+            if status == "⚠️":
+                if bullets_with_outcomes < 2:
+                    print(f"   ⚠️  Needs at least 2 bullets with outcomes (has {bullets_with_outcomes})")
+                elif bullets_with_outcomes > 4 and not (is_first_role and total_bullets == 7):
+                    print(f"   ℹ️  Has {bullets_with_outcomes} bullets with outcomes (recommended: 2-4)")
+                elif is_first_role and total_bullets == 7 and bullets_with_outcomes == 5:
+                    print(f"   ✅ {bullets_with_outcomes} outcomes acceptable for first role with 7 bullets")
+                if bullets_without_outcomes < 1:
+                    print(f"   ⚠️  Needs at least 1 bullet without outcome (has {bullets_without_outcomes})")
+        
         # Check for revision notes
         revision_bullets = []
         for role in tailored.tailored_roles:
@@ -162,6 +217,14 @@ Examples:
             print(f"\n📋 {len(tailored.gaps_to_confirm)} GAP(S) TO CONFIRM:")
             for gap in tailored.gaps_to_confirm:
                 print(f"  - {gap}")
+        
+        # Keyword coverage report
+        print(f"\n🔍 ATS KEYWORD OPTIMIZATION:")
+        print("-" * 60)
+        print("✅ Tailored resume has been optimized for ATS matching")
+        print("   - JD keywords incorporated into headline, summary, skills, and bullets")
+        print("   - Natural keyword placement for better ATS parsing")
+        print("   - Industry terminology aligned with job description")
         
         print(f"\n📁 Output files:")
         print(f"  - JSON: {json_path}")

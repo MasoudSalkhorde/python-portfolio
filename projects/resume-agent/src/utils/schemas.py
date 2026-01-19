@@ -17,6 +17,7 @@ class JobDescriptionJSON(BaseModel):
     requirements: List[JDRequirement] = Field(default_factory=list)
     networks_tools: List[str] = Field(default_factory=list)  # Meta, Google, TikTok, AppLovin...
     metrics: List[str] = Field(default_factory=list)         # ROAS, LTV, CPI...
+    priority_keywords: List[str] = Field(default_factory=list)  # ATS-relevant keywords
 
 class ResumeBullet(BaseModel):
     id: str                      # e.g. "aylo_1"

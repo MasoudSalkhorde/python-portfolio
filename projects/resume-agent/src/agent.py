@@ -218,6 +218,18 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
         jd = llm_to_schema(prompt_extract_jd(jd_text), JobDescriptionJSON)
         logger.debug(f"Extracted JD: {jd.company} - {jd.role_title}")
         
+        # Enhance keywords if not fully extracted
+        if not jd.priority_keywords or len(jd.priority_keywords) < 5:
+            from src.utils.keyword_optimizer import extract_ats_keywords, get_priority_keywords
+            enhanced_keywords = extract_ats_keywords(jd_text, jd.model_dump())
+            priority = get_priority_keywords(enhanced_keywords)
+            if priority:
+                # Merge with existing, avoiding duplicates
+                existing_lower = [k.lower() for k in jd.priority_keywords]
+                new_keywords = [k for k in priority if k.lower() not in existing_lower]
+                jd.priority_keywords.extend(new_keywords[:10])  # Add top 10 new ones
+                logger.debug(f"Enhanced keywords: Added {len(new_keywords)} additional priority keywords")
+        
         logger.info("Step 4/5: Extracting resume structure...")
         resume = llm_to_schema(prompt_extract_resume(resume_text), ResumeJSON)
         logger.debug(f"Extracted resume: {resume.name} with {len(resume.roles)} roles")
@@ -237,10 +249,37 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
         if revision_count > 0:
             logger.warning(f"⚠️  {revision_count} bullet(s) flagged for revision - please review")
         
+        # Check keyword coverage
+        try:
+            from src.utils.keyword_optimizer import calculate_keyword_coverage
+            priority_keywords = getattr(jd, 'priority_keywords', [])
+            if priority_keywords:
+                tailored_text = tailored.model_dump_json()
+                keyword_coverage = calculate_keyword_coverage(
+                    {"priority_keywords": priority_keywords},
+                    tailored_text
+                )
+                
+                coverage_rate = keyword_coverage.get("priority_keywords", {}).get("coverage_rate", 0.0)
+                missing_keywords = keyword_coverage.get("priority_keywords", {}).get("missing", [])
+                
+                if coverage_rate < 0.7:  # Less than 70% coverage
+                    logger.warning(
+                        f"⚠️  Keyword coverage: {coverage_rate:.1%} - {len(missing_keywords)} priority keywords missing. "
+                        f"Consider adding: {', '.join(missing_keywords[:5])}"
+                    )
+                else:
+                    logger.info(f"✅ Keyword coverage: {coverage_rate:.1%} - Good ATS match")
+        except Exception as e:
+            logger.debug(f"Could not calculate keyword coverage: {e}")
+        
         # Step 6: Validate
         logger.info("Validating tailored resume...")
-        from src.utils.validators import validate_tailored_resume
+        from src.utils.validators import validate_tailored_resume, validate_outcome_distribution
         validate_tailored_resume(resume, tailored)
+        
+        # Additional validation for outcome distribution
+        validate_outcome_distribution(tailored)
         
         logger.info("✅ Pipeline completed successfully!")
         return tailored
