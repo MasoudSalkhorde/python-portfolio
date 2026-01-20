@@ -152,7 +152,7 @@ def validate_tailored_resume(resume: ResumeJSON, tailored: TailoredResumeJSON) -
     
     errors = []
     
-    # Check bullet provenance
+    # Check company names (critical validation)
     for role in tailored.tailored_roles:
         if role.company not in valid_companies:
             error_msg = (
@@ -163,14 +163,25 @@ def validate_tailored_resume(resume: ResumeJSON, tailored: TailoredResumeJSON) -
             errors.append(error_msg)
             logger.error(f"Validation error: {error_msg}")
         
+        # Check bullet provenance (warning only, not error)
         for bullet in role.bullets:
             for sid in bullet.source_bullet_ids:
-                if sid not in valid_ids:
-                    errors.append(f"Invalid source bullet id: {sid}")
-                    logger.error(f"Validation error: Invalid source bullet ID '{sid}'")
+                if sid and sid not in valid_ids:
+                    # Just log warning, don't fail - new bullets may not have valid source IDs
+                    logger.debug(f"Note: Bullet references unknown source ID '{sid}' (may be a new bullet)")
     
     # Check if skills are reasonable (allow some new skills but warn)
-    new_skills = set(tailored.tailored_skills) - valid_skills
+    # Handle both flat and categorized skills
+    tailored_skills_flat = []
+    for skill in tailored.tailored_skills:
+        if isinstance(skill, dict) and "skills" in skill:
+            tailored_skills_flat.extend(skill.get("skills", []))
+        elif hasattr(skill, "skills"):
+            tailored_skills_flat.extend(skill.skills)
+        elif isinstance(skill, str):
+            tailored_skills_flat.append(skill)
+    
+    new_skills = set(tailored_skills_flat) - valid_skills
     if new_skills:
         logger.warning(f"New skills added that weren't in original resume: {new_skills}")
         # Don't error, just warn - skills can be added

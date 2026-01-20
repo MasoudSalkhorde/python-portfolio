@@ -126,6 +126,59 @@ def scrape_with_selenium(url: str) -> Optional[str]:
         return None
 
 
+def get_google_doc_text(url: str) -> Optional[str]:
+    """
+    Extract text from Google Docs URL by using export URL.
+    
+    Args:
+        url: Google Docs URL
+        
+    Returns:
+        Document text or None if extraction fails
+    """
+    # Extract document ID from various Google Docs URL formats
+    # Formats:
+    # - https://docs.google.com/document/d/DOC_ID/edit
+    # - https://docs.google.com/document/d/DOC_ID/edit?usp=sharing
+    # - https://docs.google.com/document/d/DOC_ID
+    
+    doc_id_match = re.search(r'/document/d/([a-zA-Z0-9_-]+)', url)
+    if not doc_id_match:
+        return None
+    
+    doc_id = doc_id_match.group(1)
+    
+    # Use the export URL to get plain text
+    export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+    
+    logger.info(f"Fetching Google Doc as text: {doc_id}")
+    
+    try:
+        headers = {
+            'User-Agent': Config.USER_AGENT,
+        }
+        
+        response = requests.get(
+            export_url,
+            headers=headers,
+            timeout=Config.REQUEST_TIMEOUT,
+            allow_redirects=True
+        )
+        
+        if response.status_code == 200:
+            text = response.text.strip()
+            if len(text) > 50:
+                logger.info(f"Extracted {len(text)} characters from Google Doc")
+                return text
+        
+        logger.warning(f"Google Doc export failed with status {response.status_code}")
+        return None
+        
+    except Exception as e:
+        logger.warning(f"Failed to fetch Google Doc: {e}")
+        return None
+
+
 def scrape_job_description(url: str, use_selenium: bool = True) -> str:
     """
     Scrape job description from a URL.
@@ -142,6 +195,13 @@ def scrape_job_description(url: str, use_selenium: bool = True) -> str:
         requests.RequestException: If HTTP request fails
     """
     logger.info(f"Scraping job description from: {url}")
+    
+    # Special handling for Google Docs
+    if 'docs.google.com/document' in url:
+        text = get_google_doc_text(url)
+        if text and len(text) > 50:
+            return text
+        logger.warning("Google Doc export failed, trying standard scraping...")
     
     # First, try standard requests + BeautifulSoup
     try:

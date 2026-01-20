@@ -118,8 +118,22 @@ def render_pdf(tailored_json_path: str, output_pdf_path: str, include_notes: boo
 
     # Skills
     story.append(Paragraph("SKILLS", h))
-    skills_line = ", ".join(data.get("tailored_skills", []))
-    story.append(Paragraph(skills_line, body))
+    skills = data.get("tailored_skills", [])
+    
+    # Handle categorized skills
+    if skills and isinstance(skills[0], dict) and "category" in skills[0]:
+        # Categorized skills
+        for cat in skills:
+            category_name = cat.get("category", "")
+            category_skills = cat.get("skills", [])
+            if category_name and category_skills:
+                skills_line = f"<b>{category_name}:</b> {', '.join(category_skills)}"
+                story.append(Paragraph(skills_line, body))
+    else:
+        # Flat list
+        skills_line = ", ".join(skills) if skills else ""
+        story.append(Paragraph(skills_line, body))
+    
     story.append(Spacer(1, 10))
 
     # Experience
