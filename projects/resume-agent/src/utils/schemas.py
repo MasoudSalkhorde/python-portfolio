@@ -127,6 +127,13 @@ class SkillCategory(BaseModel):
     skills: List[str]
 
 
+class SkillsOutput(BaseModel):
+    """Output from dedicated skills tailoring prompt."""
+    skills: List[SkillCategory]
+    ats_keywords_used: List[str] = Field(default_factory=list, description="JD keywords included in skills")
+    coverage_notes: str = Field(default="", description="Notes on what JD requirements are covered")
+
+
 class HeaderOutput(BaseModel):
     """Output from tailor_header prompt."""
     headline: str

@@ -80,23 +80,22 @@ IMPORTANT: education must be an array of STRINGS, not objects. Format each as "D
 # =============================================================================
 
 def prompt_tailor_header(jd_json: dict, resume_json: dict) -> str:
-    """Tailor headline, summary, and skills to match JD."""
+    """Tailor headline and summary to match JD. Skills are handled separately."""
     return f"""
 {_json_only()}
 
-Create a tailored headline, summary, and CATEGORIZED skills section for this resume to match the job.
+Create a tailored headline and summary for this resume to match the job.
+NOTE: Skills will be handled in a separate step - include empty skills array.
 
 JOB:
 - Company: {jd_json.get('company', '')}
 - Role: {jd_json.get('role_title', '')}
 - Key responsibilities: {json.dumps(jd_json.get('responsibilities', [])[:5])}
-- Required tools: {json.dumps(jd_json.get('tools_platforms', []))}
-- Keywords: {json.dumps(jd_json.get('keywords', [])[:15])}
+- Keywords: {json.dumps(jd_json.get('keywords', [])[:10])}
 
 ORIGINAL RESUME:
 - Current headline: {resume_json.get('headline', '')}
 - Current summary: {json.dumps(resume_json.get('summary', resume_json.get('summary_bullets', [])))}
-- Current skills: {json.dumps(resume_json.get('skills', []))}
 
 INSTRUCTIONS:
 1. Headline: Brief, impactful, relevant to the job role
@@ -104,21 +103,93 @@ INSTRUCTIONS:
    - Use JD keywords naturally, but NEVER copy JD sentences verbatim
    - Paraphrase and rewrite in your own words
    - Sound like a real professional describing their experience, not a job posting
-3. Skills: Organize into 3-5 CATEGORIES. Put JD-relevant skills first in each category.
-   Common categories: "Strategy & Marketing", "Data & Analytics", "Tools & Platforms", "Technical Skills", "Leadership & Soft Skills"
 
 OUTPUT:
 {{
   "headline": "",
   "summary": ["...", "...", "..."],
-  "skills": [
-    {{"category": "Strategy & Marketing", "skills": ["Digital Marketing", "Campaign Management", "..."]}},
-    {{"category": "Data & Analytics", "skills": ["Google Analytics", "SQL", "..."]}},
-    {{"category": "Tools & Platforms", "skills": ["Salesforce", "HubSpot", "..."]}},
-    {{"category": "Technical Skills", "skills": ["Python", "SQL", "..."]}},
-    {{"category": "Leadership", "skills": ["Team Management", "Cross-functional Collaboration", "..."]}}
-  ]
+  "skills": []
 }}
+""".strip()
+
+
+def prompt_tailor_skills(jd_json: dict, primary_skills: list = None, secondary_skills: list = None) -> str:
+    """
+    Dedicated prompt for comprehensive skills section tailoring.
+    Creates skills based ONLY on the job description.
+    
+    Args:
+        jd_json: Job description data
+        primary_skills: Ignored (kept for backward compatibility)
+        secondary_skills: Ignored (kept for backward compatibility)
+    """
+    # Extract all JD requirements for comprehensive matching
+    jd_tools = jd_json.get('tools_platforms', [])
+    jd_keywords = jd_json.get('keywords', [])
+    jd_responsibilities = jd_json.get('responsibilities', [])
+    jd_requirements = jd_json.get('requirements', [])
+    
+    # Build requirements list for display
+    req_list = []
+    for req in jd_requirements:
+        if isinstance(req, dict):
+            req_list.append(f"- {req.get('requirement', '')} ({req.get('type', 'must')})")
+        else:
+            req_list.append(f"- {req}")
+    
+    return f"""
+{_json_only()}
+
+You are an ATS optimization expert. Create a COMPREHENSIVE skills section based ENTIRELY on the job description.
+
+=== JOB DESCRIPTION ===
+
+COMPANY: {jd_json.get('company', '')}
+ROLE: {jd_json.get('role_title', '')}
+
+TOOLS & PLATFORMS MENTIONED:
+{json.dumps(jd_tools, indent=2)}
+
+KEYWORDS FROM JD:
+{json.dumps(jd_keywords, indent=2)}
+
+JOB REQUIREMENTS:
+{chr(10).join(req_list) if req_list else "Not specified"}
+
+KEY RESPONSIBILITIES:
+{json.dumps(jd_responsibilities, indent=2)}
+
+=== YOUR TASK ===
+
+Extract ALL skills from the job description and organize them into categories.
+
+RULES:
+1. INCLUDE ALL REQUIRED SKILLS: Every tool, platform, and skill mentioned in the JD MUST be included
+2. INCLUDE ALL IMPORTANT SKILLS: Skills implied by responsibilities should be included
+3. USE EXACT JD TERMINOLOGY: If JD says "Google Analytics 4", use exactly that (not "GA4" or "Analytics")
+4. PRIORITIZE ORDER: Within each category, put REQUIRED skills first, then NICE-TO-HAVE skills
+5. COMPREHENSIVE COVERAGE: 4-6 categories, 5-10 skills per category
+
+CATEGORIES TO USE (pick 4-6 that fit the JD):
+- "Marketing & Strategy" (campaigns, growth, brand, positioning, etc.)
+- "Data & Analytics" (GA4, SQL, BI tools, reporting, A/B testing, etc.)
+- "Advertising Platforms" (Google Ads, Meta Ads, programmatic, DSPs, etc.)
+- "MarTech & Tools" (CRM, CDPs, automation, tracking, tag management, etc.)
+- "Technical Skills" (Python, SQL, APIs, scripting, etc.)
+- "Leadership & Collaboration" (team management, stakeholder communication, etc.)
+
+=== OUTPUT FORMAT ===
+{{
+  "skills": [
+    {{"category": "Category Name", "skills": ["Required Skill 1", "Required Skill 2", "Important Skill 3", "..."]}},
+    ...
+  ],
+  "ats_keywords_used": ["keyword1", "keyword2", "..."],
+  "coverage_notes": "Brief note: X required skills covered, Y important skills covered"
+}}
+
+CRITICAL: Do NOT invent skills not in the JD. Extract ONLY what is mentioned or clearly implied.
+Include ALL required skills and MOST important skills from the job description.
 """.strip()
 
 
@@ -128,7 +199,8 @@ def prompt_tailor_role(
     role_index: int,
     total_roles: int,
     responsibilities_to_cover: list,
-    used_responsibilities: list
+    used_responsibilities: list,
+    secondary_metrics: list = None
 ) -> str:
     """
     Tailor a single role's bullets to match JD responsibilities.
@@ -140,6 +212,7 @@ def prompt_tailor_role(
         total_roles: Total number of roles
         responsibilities_to_cover: JD responsibilities this role should address
         used_responsibilities: Responsibilities already covered by previous roles
+        secondary_metrics: Additional metrics from secondary resume to borrow from
     """
     
     # Determine bullet count and outcome requirements based on role position
@@ -208,7 +281,10 @@ NEVER copy JD language verbatim. Paraphrase and rewrite.
 Priority order:
 1. FIRST: Use outcomes from ORIGINAL BULLETS (preserve exact numbers)
 2. SECOND: Adapt an outcome from a different original bullet if relevant
-3. THIRD: INVENT a reasonable outcome if needed (set needs_revision=true)
+3. THIRD: Use metrics from SECONDARY RESUME below (if available)
+4. FOURTH: INVENT a reasonable outcome if needed (set needs_revision=true)
+
+{f"=== ADDITIONAL METRICS FROM SECONDARY RESUME ===" + chr(10) + "You can borrow/adapt these metrics for your bullets:" + chr(10) + json.dumps(secondary_metrics[:10], indent=2) if secondary_metrics else ""}
 
 IMPORTANT: Only {exact_outcomes} bullets should have numerical outcomes. The rest must be qualitative.
 
@@ -241,7 +317,8 @@ def prompt_tailor_role_low_match(
     role_index: int,
     total_roles: int,
     responsibilities_to_cover: list,
-    used_responsibilities: list
+    used_responsibilities: list,
+    secondary_metrics: list = None
 ) -> str:
     """
     Tailor a role when the JD is significantly different from available resumes.
@@ -311,6 +388,8 @@ Since you're inventing content, use realistic ranges for outcomes:
 - Budgets: $100K-$5M depending on company size
 - Team sizes: 2-10 people
 - Project counts: 5-50 depending on scope
+
+{f"=== ADDITIONAL METRICS FROM SECONDARY RESUME ===" + chr(10) + "You can borrow/adapt these metrics for your bullets:" + chr(10) + json.dumps(secondary_metrics[:10], indent=2) if secondary_metrics else ""}
 
 === OUTPUT FORMAT ===
 {{

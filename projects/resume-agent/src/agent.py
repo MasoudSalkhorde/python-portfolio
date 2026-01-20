@@ -29,6 +29,7 @@ from src.utils.schemas import (
     RoleOutput,
     ReviewOutput,
     SkillCategory,
+    SkillsOutput,
     ResumeScoreOutput,
     GapCoverageOutput,
 )
@@ -180,6 +181,7 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple
         prompt_extract_jd,
         prompt_extract_resume,
         prompt_tailor_header,
+        prompt_tailor_skills,
         prompt_tailor_role,
         prompt_tailor_role_low_match,
         prompt_final_review,
@@ -192,11 +194,17 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple
     logger.info("Starting MODULAR resume tailoring pipeline")
     logger.info("=" * 50)
     
-    # Step 1: Select best resume
+    # Step 1: Select best resume(s)
     logger.info("\n[Step 1] Selecting best resume...")
     index_path = resume_index_path or str(Config.RESUME_INDEX_PATH)
-    best_resume, scores, is_low_match = choose_resume_pdf(jd_text, index_path)
-    logger.info(f"  → Selected: {best_resume.label}")
+    selection = choose_resume_pdf(jd_text, index_path)
+    
+    best_resume = selection.primary
+    is_low_match = selection.is_low_match
+    
+    logger.info(f"  → Primary: {best_resume.label}")
+    if selection.use_secondary and selection.secondary:
+        logger.info(f"  → Secondary: {selection.secondary.label} (will use for additional skills/metrics)")
     if is_low_match:
         logger.warning(f"  → ⚠️ LOW MATCH MODE: Will write responsibilities based on JD")
     
@@ -205,6 +213,12 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple
     resume_text = pdf_to_text(best_resume.path)
     if not resume_text or len(resume_text.strip()) < 50:
         raise ValueError(f"Resume PDF appears empty: {best_resume.path}")
+    
+    # Extract secondary resume text if available
+    secondary_resume_text = None
+    if selection.use_secondary and selection.secondary:
+        logger.info(f"  → Also extracting secondary resume: {selection.secondary.label}")
+        secondary_resume_text = pdf_to_text(selection.secondary.path)
     
     # Step 3: Extract structures (2 LLM calls)
     logger.info("\n[Step 3] Extracting JD structure...")
@@ -216,16 +230,58 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple
     resume = llm_to_schema(prompt_extract_resume(resume_text), ResumeJSON)
     logger.info(f"  → {resume.name} with {len(resume.roles)} roles")
     
+    # Extract secondary resume structure if available
+    secondary_resume = None
+    secondary_skills = []
+    secondary_metrics = []
+    
+    if secondary_resume_text:
+        logger.info(f"  → Extracting secondary resume structure...")
+        secondary_resume = llm_to_schema(prompt_extract_resume(secondary_resume_text), ResumeJSON)
+        
+        # Extract additional skills from secondary resume
+        secondary_skills = [s for s in secondary_resume.skills if s not in resume.skills]
+        logger.info(f"  → Found {len(secondary_skills)} additional skills from secondary resume")
+        
+        # Extract metrics/outcomes from secondary resume bullets
+        for role in secondary_resume.roles:
+            for bullet in role.bullets:
+                bullet_text = bullet.text if hasattr(bullet, 'text') else str(bullet)
+                # Check if bullet contains metrics (%, $, numbers)
+                if any(char in bullet_text for char in ['%', '$']) or any(c.isdigit() for c in bullet_text):
+                    secondary_metrics.append({
+                        "company": role.company,
+                        "text": bullet_text
+                    })
+        logger.info(f"  → Found {len(secondary_metrics)} metrics from secondary resume")
+    
     # Store original companies for validation
     original_companies = [role.company for role in resume.roles]
     
     # Step 5: Tailor header (1 LLM call)
-    logger.info("\n[Step 5] Tailoring header...")
+    logger.info("\n[Step 5] Tailoring header (headline + summary)...")
+    
     header = llm_to_schema(
         prompt_tailor_header(jd.model_dump(), resume.model_dump()),
         HeaderOutput
     )
     logger.info(f"  → Headline: {header.headline[:50]}...")
+    
+    # Step 5b: Tailor skills separately (based ONLY on JD)
+    logger.info("\n[Step 5b] Tailoring skills (from JD only)...")
+    
+    skills_output = llm_to_schema(
+        prompt_tailor_skills(jd_json=jd.model_dump()),
+        SkillsOutput
+    )
+    
+    # Replace header skills with the JD-based skills output
+    header.skills = skills_output.skills
+    
+    logger.info(f"  → {len(skills_output.skills)} skill categories generated")
+    logger.info(f"  → {len(skills_output.ats_keywords_used)} ATS keywords included")
+    if skills_output.coverage_notes:
+        logger.info(f"  → Coverage: {skills_output.coverage_notes[:80]}...")
     
     # Step 6: Tailor each role (1 LLM call per role)
     logger.info(f"\n[Step 6] Tailoring {len(resume.roles)} roles...")
@@ -258,7 +314,8 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple
                 role_index=i,
                 total_roles=len(resume.roles),
                 responsibilities_to_cover=responsibilities_to_cover,
-                used_responsibilities=used_responsibilities
+                used_responsibilities=used_responsibilities,
+                secondary_metrics=secondary_metrics if secondary_metrics else None
             )
         else:
             role_prompt = prompt_tailor_role(
@@ -267,7 +324,8 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple
                 role_index=i,
                 total_roles=len(resume.roles),
                 responsibilities_to_cover=responsibilities_to_cover,
-                used_responsibilities=used_responsibilities
+                used_responsibilities=used_responsibilities,
+                secondary_metrics=secondary_metrics if secondary_metrics else None
             )
         
         role_output = llm_to_schema(role_prompt, RoleOutput)

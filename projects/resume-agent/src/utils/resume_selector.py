@@ -2,7 +2,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 
 from src.utils.io_pdf import pdf_to_text
@@ -112,20 +112,32 @@ def keyword_score(jd_text: str, keywords: List[str]) -> float:
     return score
 
 
+@dataclass
+class ResumeSelection:
+    """Result of resume selection process."""
+    primary: ResumeCandidate
+    secondary: Optional[ResumeCandidate]  # Close second-best, if any
+    scores: Dict[str, float]
+    is_low_match: bool
+    use_secondary: bool  # True if secondary resume should be used for additional context
+
+
 def choose_resume_pdf(
     jd_text: str,
     index_path: str = None
-) -> Tuple[ResumeCandidate, Dict[str, float], bool]:
+) -> ResumeSelection:
     """
     Choose the best matching resume PDF based on job description.
+    
+    If a second resume scores within 20% of the best, it will be included
+    as a secondary source for additional skills and metrics.
     
     Args:
         jd_text: Job description text
         index_path: Path to resume index JSON file (defaults to config)
         
     Returns:
-        Tuple of (best candidate, scores dictionary, is_low_match)
-        - is_low_match: True if the best match score is below threshold (JD is significantly different from all resumes)
+        ResumeSelection with primary resume, optional secondary, scores, and flags
         
     Raises:
         ValueError: If no candidates available or selection fails
@@ -146,7 +158,8 @@ def choose_resume_pdf(
         try:
             score = keyword_score(jd_text, candidate.keywords)
             scores[candidate.id] = score
-            logger.debug(f"Candidate {candidate.id} ({candidate.label}): score={score:.2f}")
+            # Always log scores for visibility
+            logger.info(f"  📊 {candidate.label}: score={score:.1f}")
         except Exception as e:
             logger.warning(f"Failed to score candidate {candidate.id}: {e}")
             scores[candidate.id] = 0.0
@@ -154,12 +167,27 @@ def choose_resume_pdf(
     if not scores:
         raise ValueError("Failed to score any candidates")
     
-    best = max(candidates, key=lambda c: scores.get(c.id, 0.0))
+    # Sort candidates by score (descending)
+    sorted_candidates = sorted(candidates, key=lambda c: scores.get(c.id, 0.0), reverse=True)
+    
+    best = sorted_candidates[0]
     best_score = scores[best.id]
     
+    # Check for close second-best
+    secondary = None
+    use_secondary = False
+    SECONDARY_THRESHOLD = 0.80  # Use secondary if within 20% of best score
+    
+    if len(sorted_candidates) > 1:
+        second_best = sorted_candidates[1]
+        second_score = scores[second_best.id]
+        
+        if best_score > 0 and second_score >= best_score * SECONDARY_THRESHOLD:
+            secondary = second_best
+            use_secondary = True
+            logger.info(f"  🔀 Secondary resume: {secondary.label} (score={second_score:.1f}, within {SECONDARY_THRESHOLD*100:.0f}% of best)")
+    
     # Calculate match quality
-    # A good match typically has score >= 10 (at least 5 exact keyword matches)
-    # A poor match has score < 5 (less than 3 exact keyword matches)
     LOW_MATCH_THRESHOLD = 6.0
     is_low_match = best_score < LOW_MATCH_THRESHOLD
     
@@ -168,6 +196,12 @@ def choose_resume_pdf(
         logger.warning(f"   Job description appears significantly different from available resumes.")
         logger.warning(f"   Will use work history from '{best.label}' but write responsibilities based on JD.")
     else:
-        logger.info(f"Selected resume: {best.label} (score: {best_score:.2f})")
+        logger.info(f"  ✅ Selected primary: {best.label} (score: {best_score:.1f})")
     
-    return best, scores, is_low_match
+    return ResumeSelection(
+        primary=best,
+        secondary=secondary,
+        scores=scores,
+        is_low_match=is_low_match,
+        use_secondary=use_secondary
+    )
