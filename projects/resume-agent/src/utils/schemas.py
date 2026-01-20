@@ -190,10 +190,24 @@ class TailoredRole(BaseModel):
 
 class TailoredResumeJSON(BaseModel):
     """Complete tailored resume - assembled from modular outputs."""
+    # Personal info (from original resume)
+    name: str = ""
+    email: Optional[str] = None
+    location: Optional[str] = None
+    linkedin: Optional[str] = None
+    
+    # Tailored content
     tailored_headline: str
     tailored_summary: List[str]
     tailored_skills: List[SkillCategory]  # Categorized skills
     tailored_roles: List[TailoredRole]
+    
+    # Preserved from original resume
+    education: List = Field(default_factory=list)
+    certifications: List[str] = Field(default_factory=list)
+    awards: List[str] = Field(default_factory=list)
+    
+    # Metadata
     change_log: List[str] = Field(default_factory=list)
     questions_for_user: List[str] = Field(default_factory=list)
     gaps_to_confirm: List[str] = Field(default_factory=list)

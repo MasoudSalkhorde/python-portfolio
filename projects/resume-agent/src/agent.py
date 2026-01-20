@@ -305,11 +305,38 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
     # Step 8: Assemble final resume
     logger.info("\n[Step 8] Assembling final resume...")
     
+    # Extract education as strings if they're dicts
+    education_list = []
+    for edu in resume.education:
+        if isinstance(edu, dict):
+            parts = []
+            if edu.get("degree"):
+                parts.append(edu["degree"])
+            if edu.get("institution"):
+                parts.append(edu["institution"])
+            education_list.append("\n".join(parts) if parts else str(edu))
+        else:
+            education_list.append(str(edu))
+    
     tailored = TailoredResumeJSON(
+        # Personal info from original resume
+        name=resume.name,
+        email=resume.email,
+        location=resume.location,
+        linkedin=None,  # TODO: extract from resume if available
+        
+        # Tailored content
         tailored_headline=header.headline,
         tailored_summary=header.summary,
         tailored_skills=header.skills,
         tailored_roles=tailored_roles,
+        
+        # Preserved from original resume
+        education=education_list,
+        certifications=resume.certifications,
+        awards=resume.awards,
+        
+        # Metadata
         change_log=review.change_log,
         questions_for_user=review.questions_for_user,
         gaps_to_confirm=review.gaps_to_confirm

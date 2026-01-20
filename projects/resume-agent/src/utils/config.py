@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+# Force reload .env file, overriding any cached values
+load_dotenv(override=True)
 
 class Config:
     """Configuration class for resume agent."""
@@ -23,6 +24,7 @@ class Config:
     RESUME_INDEX_PATH: Path = DATA_DIR / "resumes" / "resume_index.json"
     
     # Google Docs settings
+    # Template doc ID for resume rendering
     GOOGLE_TEMPLATE_DOC_ID: str = os.getenv("GOOGLE_TEMPLATE_DOC_ID", "1eIP5OWCnFlK-BGu9lq6-5MGiUvrLelc7pFSxSoq0Xio")
     GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
     GOOGLE_TOKEN_PATH: str = os.getenv("GOOGLE_TOKEN_PATH", "token.json")

@@ -1,18 +1,19 @@
 """
-Render tailored resume to Google Docs.
+Render tailored resume to Google Docs using template.
 
-Two modes:
-1. Template mode (default): Copy a template and replace placeholders
-2. Build mode: Create document structure from scratch
-
-Set GOOGLE_TEMPLATE_DOC_ID in .env for template mode.
-Leave it empty or set to "BUILD" to build from scratch.
+Template placeholders:
+- {{NAME}}
+- {{HEADLINE}}
+- {{SUMMARY_BULLETS}}
+- {{SKILLS_CATEGORY1}}: {{SKILLS1}} (up to 4 categories)
+- {{JOB_TITLE1}}, {{DURATION1}}, {{COMPANY1}}, {{RESPONSIBILITIES1}} (up to 4 jobs)
+- {{CERTIFICATIONS}}
+- {{AWARDS & SCHOLARSHIPS}}
 """
 import json
 import os
-import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -66,333 +67,129 @@ def get_services():
 
 
 # =============================================================================
-# DOCUMENT BUILDING (FROM SCRATCH)
+# TEMPLATE RENDERING
 # =============================================================================
 
-def create_blank_document(docs, title: str) -> str:
-    """Create a new blank Google Doc."""
-    doc = docs.documents().create(body={"title": title}).execute()
-    return doc.get("documentId")
+def copy_template(drive, template_doc_id: str, new_title: str) -> str:
+    """Copy Google Doc template."""
+    logger.info(f"Copying template: {template_doc_id}")
+    copied = drive.files().copy(
+        fileId=template_doc_id,
+        body={"name": new_title}
+    ).execute()
+    return copied["id"]
 
 
-def build_document_requests(data: dict) -> List[Dict[str, Any]]:
+def build_replacements(data: dict) -> Dict[str, str]:
     """
-    Build Google Docs API requests to create resume structure.
+    Build placeholder replacements from tailored resume data.
     
-    Structure:
-    - Name (large, bold, centered)
-    - Contact info (centered)
-    - Headline (centered)
-    - SUMMARY section
-    - SKILLS section  
-    - EXPERIENCE section (with roles and bullets)
-    - EDUCATION section
+    Uses numbered placeholders for skills and experience:
+    - {{SKILLS_CATEGORY1}}, {{SKILLS1}}, etc.
+    - {{JOB_TITLE1}}, {{COMPANY1}}, {{DURATION1}}, {{RESPONSIBILITIES1}}, etc.
     """
-    requests = []
+    replacements = {}
     
-    # We build content from bottom to top (inserting at index 1)
-    # because Google Docs insertText shifts indices
+    # {{NAME}}
+    replacements["{{NAME}}"] = data.get("name", "Your Name")
     
-    # Collect all content first, then reverse
-    content_parts = []
+    # {{HEADLINE}}
+    replacements["{{HEADLINE}}"] = data.get("tailored_headline", "")
     
-    # === HEADER ===
-    name = data.get("name", "Your Name")
-    email = data.get("email", "")
-    location = data.get("location", "")
-    headline = data.get("tailored_headline", "")
+    # {{SUMMARY_BULLETS}} - bullet points with •
+    summary = data.get("tailored_summary", [])
+    summary_lines = []
+    for bullet in summary:
+        summary_lines.append(f"• {bullet}")
+    replacements["{{SUMMARY_BULLETS}}"] = "\n".join(summary_lines)
     
-    # Name
-    content_parts.append({
-        "text": f"{name}\n",
-        "style": "HEADING_1",
-        "center": True,
-        "bold": True
-    })
-    
-    # Contact line
-    contact_parts = []
-    if location:
-        contact_parts.append(location)
-    if email:
-        contact_parts.append(email)
-    if contact_parts:
-        content_parts.append({
-            "text": " | ".join(contact_parts) + "\n",
-            "style": "NORMAL_TEXT",
-            "center": True,
-            "fontSize": 10
-        })
-    
-    # Headline
-    if headline:
-        content_parts.append({
-            "text": f"{headline}\n\n",
-            "style": "NORMAL_TEXT",
-            "center": True,
-            "bold": True,
-            "fontSize": 11
-        })
-    
-    # === SUMMARY ===
-    summary_bullets = data.get("tailored_summary", [])
-    if summary_bullets:
-        content_parts.append({
-            "text": "SUMMARY\n",
-            "style": "HEADING_2",
-            "bold": True,
-            "underline": True
-        })
-        for bullet in summary_bullets:
-            content_parts.append({
-                "text": f"• {bullet}\n",
-                "style": "NORMAL_TEXT",
-                "indent": True
-            })
-        content_parts.append({"text": "\n", "style": "NORMAL_TEXT"})
-    
-    # === SKILLS ===
+    # ========================================
+    # SKILLS - numbered placeholders (1-4)
+    # ========================================
     skills = data.get("tailored_skills", [])
-    if skills:
-        content_parts.append({
-            "text": "SKILLS\n",
-            "style": "HEADING_2",
-            "bold": True,
-            "underline": True
-        })
-        
-        # Check if skills are categorized (list of dicts with category/skills)
-        if skills and isinstance(skills[0], dict) and "category" in skills[0]:
-            # Categorized skills
-            for cat in skills:
-                category_name = cat.get("category", "")
-                category_skills = cat.get("skills", [])
-                if category_name and category_skills:
-                    skills_line = ", ".join(category_skills)
-                    content_parts.append({
-                        "text": f"{category_name}: ",
-                        "style": "NORMAL_TEXT",
-                        "bold": True
-                    })
-                    content_parts.append({
-                        "text": f"{skills_line}\n",
-                        "style": "NORMAL_TEXT"
-                    })
-        else:
-            # Flat list of skills (backward compatibility)
-            skills_text = ", ".join(skills) if isinstance(skills[0], str) else str(skills)
-            content_parts.append({
-                "text": f"{skills_text}\n",
-                "style": "NORMAL_TEXT"
-            })
-        
-        content_parts.append({"text": "\n", "style": "NORMAL_TEXT"})
     
-    # === EXPERIENCE ===
+    for i in range(1, 5):  # Support up to 4 skill categories
+        if i <= len(skills):
+            skill_cat = skills[i - 1]
+            if isinstance(skill_cat, dict):
+                category_name = skill_cat.get("category", "")
+                category_skills = skill_cat.get("skills", [])
+                replacements[f"{{{{SKILLS_CATEGORY{i}}}}}"] = category_name
+                replacements[f"{{{{SKILLS{i}}}}}"] = ", ".join(category_skills)
+            else:
+                # Flat skill
+                replacements[f"{{{{SKILLS_CATEGORY{i}}}}}"] = "Skills"
+                replacements[f"{{{{SKILLS{i}}}}}"] = str(skill_cat)
+        else:
+            # No skill at this position - clear placeholder
+            replacements[f"{{{{SKILLS_CATEGORY{i}}}}}"] = ""
+            replacements[f"{{{{SKILLS{i}}}}}"] = ""
+    
+    # ========================================
+    # EXPERIENCE - numbered placeholders (1-4)
+    # ========================================
     roles = data.get("tailored_roles", [])
-    if roles:
-        content_parts.append({
-            "text": "EXPERIENCE\n",
-            "style": "HEADING_2",
-            "bold": True,
-            "underline": True
-        })
-        
-        for role in roles:
+    
+    for i in range(1, 5):  # Support up to 4 jobs
+        if i <= len(roles):
+            role = roles[i - 1]
             company = role.get("company", "")
             title = role.get("title", "")
             dates = role.get("dates", "")
             
-            # Role header: Title — Company (Dates)
-            role_header = f"{title}"
-            if company:
-                role_header += f" — {company}"
-            if dates:
-                role_header += f" ({dates})"
+            replacements[f"{{{{JOB_TITLE{i}}}}}"] = title
+            replacements[f"{{{{COMPANY{i}}}}}"] = company
+            replacements[f"{{{{DURATION{i}}}}}"] = dates
             
-            content_parts.append({
-                "text": f"{role_header}\n",
-                "style": "NORMAL_TEXT",
-                "bold": True
-            })
-            
-            # Bullets
+            # Build responsibilities (bullets)
             bullets = role.get("bullets", [])
+            resp_lines = []
             for b in bullets:
-                bullet_text = b.get("text", b) if isinstance(b, dict) else b
+                bullet_text = b.get("text", b) if isinstance(b, dict) else str(b)
                 needs_revision = b.get("needs_revision", False) if isinstance(b, dict) else False
                 
                 if needs_revision:
-                    revision_note = b.get("revision_note", "") if isinstance(b, dict) else ""
-                    bullet_text = f"{bullet_text} [NEEDS REVIEW: {revision_note}]"
+                    bullet_text = f"{bullet_text} [NEEDS REVIEW]"
                 
-                content_parts.append({
-                    "text": f"• {bullet_text}\n",
-                    "style": "NORMAL_TEXT",
-                    "indent": True
-                })
+                resp_lines.append(f"• {bullet_text}")
             
-            content_parts.append({"text": "\n", "style": "NORMAL_TEXT"})
+            replacements[f"{{{{RESPONSIBILITIES{i}}}}}"] = "\n".join(resp_lines)
+        else:
+            # No role at this position - clear placeholders
+            replacements[f"{{{{JOB_TITLE{i}}}}}"] = ""
+            replacements[f"{{{{COMPANY{i}}}}}"] = ""
+            replacements[f"{{{{DURATION{i}}}}}"] = ""
+            replacements[f"{{{{RESPONSIBILITIES{i}}}}}"] = ""
     
-    # === EDUCATION ===
-    education = data.get("education", [])
-    if education:
-        content_parts.append({
-            "text": "EDUCATION\n",
-            "style": "HEADING_2",
-            "bold": True,
-            "underline": True
-        })
-        for edu in education:
-            if isinstance(edu, dict):
-                edu_text = edu.get("degree", "")
-                if edu.get("institution"):
-                    edu_text += f", {edu['institution']}"
-                if edu.get("year"):
-                    edu_text += f" ({edu['year']})"
-            else:
-                edu_text = str(edu)
-            content_parts.append({
-                "text": f"• {edu_text}\n",
-                "style": "NORMAL_TEXT",
-                "indent": True
-            })
-    
-    # === CERTIFICATIONS ===
+    # {{CERTIFICATIONS}}
     certs = data.get("certifications", [])
-    if certs:
-        content_parts.append({
-            "text": "\nCERTIFICATIONS\n",
-            "style": "HEADING_2",
-            "bold": True,
-            "underline": True
-        })
-        for cert in certs:
-            content_parts.append({
-                "text": f"• {cert}\n",
-                "style": "NORMAL_TEXT",
-                "indent": True
-            })
+    replacements["{{CERTIFICATIONS}}"] = "\n".join(certs)
     
-    # Now build the actual requests
-    # Insert all text first at index 1
-    full_text = ""
-    text_ranges = []  # Track where each part starts/ends for formatting
+    # {{AWARDS & SCHOLARSHIPS}}
+    awards = data.get("awards", [])
+    replacements["{{AWARDS & SCHOLARSHIPS}}"] = "\n".join(awards)
     
-    for part in content_parts:
-        start_idx = len(full_text) + 1  # +1 because doc starts at index 1
-        full_text += part["text"]
-        end_idx = len(full_text) + 1
-        text_ranges.append({
-            "start": start_idx,
-            "end": end_idx,
-            **part
-        })
-    
-    # Insert all text at once
-    requests.append({
-        "insertText": {
-            "location": {"index": 1},
-            "text": full_text
-        }
-    })
-    
-    # Apply formatting
-    for tr in text_ranges:
-        start = tr["start"]
-        end = tr["end"]
-        
-        # Paragraph style
-        if tr.get("style") == "HEADING_1":
-            requests.append({
-                "updateParagraphStyle": {
-                    "range": {"startIndex": start, "endIndex": end},
-                    "paragraphStyle": {
-                        "namedStyleType": "HEADING_1",
-                        "alignment": "CENTER" if tr.get("center") else "START"
-                    },
-                    "fields": "namedStyleType,alignment"
-                }
-            })
-        elif tr.get("style") == "HEADING_2":
-            requests.append({
-                "updateParagraphStyle": {
-                    "range": {"startIndex": start, "endIndex": end},
-                    "paragraphStyle": {
-                        "namedStyleType": "HEADING_2"
-                    },
-                    "fields": "namedStyleType"
-                }
-            })
-        
-        # Text formatting
-        text_style = {}
-        fields = []
-        
-        if tr.get("bold"):
-            text_style["bold"] = True
-            fields.append("bold")
-        
-        if tr.get("underline"):
-            text_style["underline"] = True
-            fields.append("underline")
-        
-        if tr.get("fontSize"):
-            text_style["fontSize"] = {"magnitude": tr["fontSize"], "unit": "PT"}
-            fields.append("fontSize")
-        
-        if fields:
-            requests.append({
-                "updateTextStyle": {
-                    "range": {"startIndex": start, "endIndex": end - 1},  # -1 to exclude newline
-                    "textStyle": text_style,
-                    "fields": ",".join(fields)
-                }
-            })
-        
-        # Center alignment
-        if tr.get("center") and tr.get("style") != "HEADING_1":
-            requests.append({
-                "updateParagraphStyle": {
-                    "range": {"startIndex": start, "endIndex": end},
-                    "paragraphStyle": {"alignment": "CENTER"},
-                    "fields": "alignment"
-                }
-            })
-        
-        # Indent for bullets
-        if tr.get("indent"):
-            requests.append({
-                "updateParagraphStyle": {
-                    "range": {"startIndex": start, "endIndex": end},
-                    "paragraphStyle": {
-                        "indentFirstLine": {"magnitude": 18, "unit": "PT"},
-                        "indentStart": {"magnitude": 18, "unit": "PT"}
-                    },
-                    "fields": "indentFirstLine,indentStart"
-                }
-            })
-    
-    return requests
+    return replacements
 
 
-def build_resume_from_scratch(docs, data: dict, title: str) -> str:
-    """Build a resume document from scratch."""
-    logger.info("Creating new document...")
-    doc_id = create_blank_document(docs, title)
+def replace_placeholders(docs, doc_id: str, replacements: Dict[str, str]):
+    """Replace all placeholders in the document."""
+    requests = []
     
-    logger.info("Building document structure...")
-    requests = build_document_requests(data)
+    for placeholder, value in replacements.items():
+        requests.append({
+            "replaceAllText": {
+                "containsText": {"text": placeholder, "matchCase": True},
+                "replaceText": value
+            }
+        })
     
-    if requests:
-        docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
-    
-    logger.info("Document built successfully")
-    return doc_id
+    logger.info(f"Replacing {len(requests)} placeholders...")
+    docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
 
 
 # =============================================================================
-# TEMPLATE MODE (LEGACY)
+# MAIN FUNCTIONS
 # =============================================================================
 
 def load_json(path: str) -> dict:
@@ -401,137 +198,13 @@ def load_json(path: str) -> dict:
         return json.load(f)
 
 
-def copy_template(drive, template_doc_id: str, new_title: str) -> str:
-    """Copy Google Doc template."""
-    copied = drive.files().copy(
-        fileId=template_doc_id,
-        body={"name": new_title}
-    ).execute()
-    return copied["id"]
-
-
-def replace_placeholders(docs, doc_id: str, replacements: dict):
-    """Replace placeholders in document."""
-    requests = []
-    for key, value in replacements.items():
-        requests.append({
-            "replaceAllText": {
-                "containsText": {"text": key, "matchCase": True},
-                "replaceText": value
-            }
-        })
-    docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
-
-
-def build_resume_blocks(data: dict) -> dict:
-    """Build replacement blocks for template mode."""
-    summary_lines = "\n".join([f"- {s}" for s in data.get("tailored_summary", [])])
-    
-    # Handle categorized skills
-    skills = data.get("tailored_skills", [])
-    if skills and isinstance(skills[0], dict) and "category" in skills[0]:
-        # Categorized skills
-        skill_lines = []
-        for cat in skills:
-            category_name = cat.get("category", "")
-            category_skills = cat.get("skills", [])
-            if category_name and category_skills:
-                skill_lines.append(f"{category_name}: {', '.join(category_skills)}")
-        skills_line = "\n".join(skill_lines)
-    else:
-        # Flat list
-        skills_line = ", ".join(skills) if skills else ""
-
-    exp_parts = []
-    for r in data.get("tailored_roles", []):
-        header = f'{r.get("title","")} — {r.get("company","")} ({r.get("dates","")})'
-        exp_parts.append(header)
-        for b in r.get("bullets", []):
-            text = b.get('text', '') if isinstance(b, dict) else b
-            needs_revision = b.get('needs_revision', False) if isinstance(b, dict) else False
-            if needs_revision:
-                revision_note = b.get('revision_note', '') if isinstance(b, dict) else ''
-                text = f"{text} [REVISION NEEDED: {revision_note}]"
-            exp_parts.append(f"- {text}")
-        exp_parts.append("")
-    experience_block = "\n".join(exp_parts).strip()
-
-    return {
-        "{{NAME}}": data.get("name", "Your Name"),
-        "{{HEADLINE}}": data.get("tailored_headline", ""),
-        "{{SUMMARY_BULLETS}}": summary_lines,
-        "{{SKILLS}}": skills_line,
-        "{{EXPERIENCE}}": experience_block,
-    }
-
-
-def convert_hyphen_lines_to_bullets(docs, doc_id: str):
-    """Convert '- ' lines to real bullets."""
-    doc = docs.documents().get(documentId=doc_id).execute()
-    content = doc.get("body", {}).get("content", [])
-
-    targets = []
-    for elem in content:
-        para = elem.get("paragraph")
-        if not para:
-            continue
-        start = elem.get("startIndex")
-        end = elem.get("endIndex")
-        if start is None or end is None:
-            continue
-        text_runs = para.get("elements", [])
-        text = "".join(tr.get("textRun", {}).get("content", "") for tr in text_runs).strip()
-        if text.startswith("- "):
-            targets.append((start, end))
-
-    targets.sort(key=lambda x: x[0], reverse=True)
-
-    requests = []
-    for start, end in targets:
-        requests.append({
-            "createParagraphBullets": {
-                "range": {"startIndex": start, "endIndex": end},
-                "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
-            }
-        })
-        requests.append({
-            "deleteContentRange": {
-                "range": {"startIndex": start, "endIndex": start + 2}
-            }
-        })
-
-    if requests:
-        docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
-
-
-def build_with_template(docs, drive, data: dict, template_id: str, title: str) -> str:
-    """Build resume using template mode."""
-    logger.info(f"Copying template: {template_id}")
-    doc_id = copy_template(drive, template_id, title)
-    
-    logger.info("Replacing placeholders...")
-    replacements = build_resume_blocks(data)
-    replace_placeholders(docs, doc_id, replacements)
-    
-    logger.info("Converting to bullets...")
-    convert_hyphen_lines_to_bullets(docs, doc_id)
-    
-    return doc_id
-
-
-# =============================================================================
-# MAIN
-# =============================================================================
-
-def render_to_gdoc(data: dict, title: str = "Tailored Resume", use_template: bool = None) -> str:
+def render_to_gdoc(data: dict, title: str = "Tailored Resume") -> str:
     """
-    Render tailored resume to Google Docs.
+    Render tailored resume to Google Docs using template.
     
     Args:
         data: Tailored resume data (dict or TailoredResumeJSON)
         title: Document title
-        use_template: Force template mode (True) or build mode (False). 
-                      If None, auto-detect based on config.
     
     Returns:
         Document URL
@@ -542,18 +215,16 @@ def render_to_gdoc(data: dict, title: str = "Tailored Resume", use_template: boo
     if hasattr(data, "model_dump"):
         data = data.model_dump()
     
-    # Determine mode
+    # Copy template
     template_id = Config.GOOGLE_TEMPLATE_DOC_ID
+    if not template_id:
+        raise ValueError("GOOGLE_TEMPLATE_DOC_ID not configured. Set it in .env file.")
     
-    if use_template is None:
-        use_template = bool(template_id and template_id != "BUILD")
+    doc_id = copy_template(drive, template_id, title)
     
-    if use_template and template_id and template_id != "BUILD":
-        logger.info("Using template mode")
-        doc_id = build_with_template(docs, drive, data, template_id, title)
-    else:
-        logger.info("Building document from scratch")
-        doc_id = build_resume_from_scratch(docs, data, title)
+    # Build and apply replacements
+    replacements = build_replacements(data)
+    replace_placeholders(docs, doc_id, replacements)
     
     doc_url = f"https://docs.google.com/document/d/{doc_id}"
     logger.info(f"✅ Created: {doc_url}")
