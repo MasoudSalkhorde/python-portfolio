@@ -163,6 +163,38 @@ class ReviewOutput(BaseModel):
     change_log: List[str] = Field(default_factory=list)
 
 
+class ResumeScoreOutput(BaseModel):
+    """Output from prompt_score_resume - Talent Acquisition Manager evaluation."""
+    score: int = Field(description="Score out of 100 for interview selection likelihood")
+    score_rationale: str = Field(description="Explanation for the score")
+    gaps: List[str] = Field(default_factory=list, description="What's missing to reach 100/100")
+    recommendations: List[str] = Field(default_factory=list, description="How to improve the score")
+
+
+class GapCoverageBullet(BaseModel):
+    """A bullet in the gap coverage output."""
+    text: str
+    is_new: bool = False  # True if this bullet was added to cover a gap
+    needs_revision: bool = False
+    revision_note: Optional[str] = None
+
+
+class GapCoverageRole(BaseModel):
+    """A role with potential new bullets added to cover gaps."""
+    role_index: int
+    company: str
+    title: str
+    dates: str
+    bullets: List[GapCoverageBullet]
+
+
+class GapCoverageOutput(BaseModel):
+    """Output from prompt_cover_gaps - resume with added bullets to cover gaps."""
+    roles_with_additions: List[GapCoverageRole]
+    gaps_addressed: List[str] = Field(default_factory=list)
+    gaps_not_addressable: List[str] = Field(default_factory=list)
+
+
 # =============================================================================
 # LEGACY SCHEMAS (for backward compatibility)
 # =============================================================================
@@ -195,6 +227,10 @@ class TailoredResumeJSON(BaseModel):
     email: Optional[str] = None
     location: Optional[str] = None
     linkedin: Optional[str] = None
+    
+    # Target job info
+    target_company: Optional[str] = None
+    target_role: Optional[str] = None
     
     # Tailored content
     tailored_headline: str

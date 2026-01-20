@@ -115,7 +115,7 @@ def keyword_score(jd_text: str, keywords: List[str]) -> float:
 def choose_resume_pdf(
     jd_text: str,
     index_path: str = None
-) -> Tuple[ResumeCandidate, Dict[str, float]]:
+) -> Tuple[ResumeCandidate, Dict[str, float], bool]:
     """
     Choose the best matching resume PDF based on job description.
     
@@ -124,7 +124,8 @@ def choose_resume_pdf(
         index_path: Path to resume index JSON file (defaults to config)
         
     Returns:
-        Tuple of (best candidate, scores dictionary)
+        Tuple of (best candidate, scores dictionary, is_low_match)
+        - is_low_match: True if the best match score is below threshold (JD is significantly different from all resumes)
         
     Raises:
         ValueError: If no candidates available or selection fails
@@ -156,6 +157,17 @@ def choose_resume_pdf(
     best = max(candidates, key=lambda c: scores.get(c.id, 0.0))
     best_score = scores[best.id]
     
-    logger.info(f"Selected resume: {best.label} (score: {best_score:.2f})")
+    # Calculate match quality
+    # A good match typically has score >= 10 (at least 5 exact keyword matches)
+    # A poor match has score < 5 (less than 3 exact keyword matches)
+    LOW_MATCH_THRESHOLD = 6.0
+    is_low_match = best_score < LOW_MATCH_THRESHOLD
     
-    return best, scores
+    if is_low_match:
+        logger.warning(f"⚠️  LOW MATCH DETECTED: Best score is {best_score:.2f} (threshold: {LOW_MATCH_THRESHOLD})")
+        logger.warning(f"   Job description appears significantly different from available resumes.")
+        logger.warning(f"   Will use work history from '{best.label}' but write responsibilities based on JD.")
+    else:
+        logger.info(f"Selected resume: {best.label} (score: {best_score:.2f})")
+    
+    return best, scores, is_low_match

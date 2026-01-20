@@ -49,12 +49,16 @@ def scrape_with_selenium(url: str) -> Optional[str]:
     
     try:
         chrome_options = Options()
-        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--headless=new')  # New headless mode
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument(f'user-agent={Config.USER_AGENT}')
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_argument('--window-size=1920,1080')
+        # Use a more realistic user agent
+        chrome_options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
         
         driver = None
         try:
@@ -75,7 +79,16 @@ def scrape_with_selenium(url: str) -> Optional[str]:
                 logger.warning("Page load timeout, proceeding anyway...")
             
             # Try to find job description content
+            # Includes specific selectors for popular job sites
             selectors = [
+                # Indeed specific
+                '#jobDescriptionText',
+                'div[id="jobDescriptionText"]',
+                'div[class*="jobsearch-jobDescriptionText"]',
+                # LinkedIn specific
+                'div[class*="description__text"]',
+                'div[class*="show-more-less-html"]',
+                # General job sites
                 'div[class*="job-description"]',
                 'div[class*="jobDescription"]',
                 'div[class*="description"]',
@@ -323,6 +336,14 @@ def scrape_job_description(url: str, use_selenium: bool = True) -> str:
         
     except requests.exceptions.RequestException as e:
         logger.error(f"HTTP request failed: {e}")
+        
+        # If we got a 403 Forbidden, try Selenium as a fallback
+        if '403' in str(e) and use_selenium and SELENIUM_AVAILABLE:
+            logger.info("Got 403 Forbidden, trying Selenium to bypass anti-scraping...")
+            selenium_text = scrape_with_selenium(url)
+            if selenium_text and len(selenium_text) > 50:
+                return selenium_text
+        
         raise ValueError(f"Failed to fetch URL: {e}") from e
     except Exception as e:
         logger.error(f"Unexpected error during scraping: {e}")

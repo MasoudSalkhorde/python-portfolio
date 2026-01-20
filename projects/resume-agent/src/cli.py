@@ -107,11 +107,11 @@ Examples:
         
         # Step 2: Run pipeline
         print("\n🤖 Running resume tailoring pipeline...")
-        tailored = run_pipeline(jd_text, args.resume_index)
+        tailored, score, gap_coverage, final_score = run_pipeline(jd_text, args.resume_index)
         
-        # Step 3: Save JSON
+        # Step 3: Save JSON (including score, gap coverage, and final score data)
         print("\n💾 Saving tailored resume...")
-        json_path = save_tailored_resume(tailored, args.output)
+        json_path = save_tailored_resume(tailored, score, gap_coverage, final_score, args.output)
         print(f"✅ Saved to: {json_path}")
         
         # Step 4: Render to PDF if requested
@@ -135,6 +135,30 @@ Examples:
         print("\n" + "="*60)
         print("✅ RESUME TAILORING COMPLETE")
         print("="*60)
+        
+        # Display initial score from Talent Acquisition Manager evaluation
+        print(f"\n📊 INITIAL INTERVIEW SELECTION SCORE: {score.score}/100")
+        print(f"   {score.score_rationale}")
+        
+        if score.gaps:
+            print(f"\n🔍 GAPS IDENTIFIED:")
+            for i, gap in enumerate(score.gaps, 1):
+                print(f"   {i}. {gap}")
+        
+        if score.recommendations:
+            print(f"\n💡 RECOMMENDATIONS:")
+            for i, rec in enumerate(score.recommendations, 1):
+                print(f"   {i}. {rec}")
+        
+        # Display final score after gap coverage
+        print(f"\n📊 FINAL INTERVIEW SELECTION SCORE: {final_score.score}/100")
+        print(f"   {final_score.score_rationale}")
+        print(f"\n   📈 Score Improvement: {final_score.score - score.score} points")
+        
+        if final_score.gaps:
+            print(f"\n🔍 REMAINING GAPS:")
+            for i, gap in enumerate(final_score.gaps, 1):
+                print(f"   {i}. {gap}")
         
         # Outcome distribution summary
         print("\n📊 OUTCOME DISTRIBUTION:")

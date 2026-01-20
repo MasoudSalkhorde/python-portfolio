@@ -29,6 +29,8 @@ from src.utils.schemas import (
     RoleOutput,
     ReviewOutput,
     SkillCategory,
+    ResumeScoreOutput,
+    GapCoverageOutput,
 )
 from src.utils.io_pdf import pdf_to_text
 from src.utils.resume_selector import choose_resume_pdf
@@ -158,7 +160,7 @@ def get_job_description(input_source: str, use_selenium: bool = True) -> str:
 # MODULAR PIPELINE
 # =============================================================================
 
-def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> TailoredResumeJSON:
+def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> tuple:
     """
     Run the modular resume tailoring pipeline.
     
@@ -169,13 +171,21 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
     4. Tailor each role (1 LLM call per role)
     5. Final review (1 LLM call)
     6. Assemble and validate
+    7. Score resume (Talent Acquisition Manager evaluation)
+    
+    Returns:
+        Tuple of (TailoredResumeJSON, ResumeScoreOutput)
     """
     from src.utils.prompts import (
         prompt_extract_jd,
         prompt_extract_resume,
         prompt_tailor_header,
         prompt_tailor_role,
+        prompt_tailor_role_low_match,
         prompt_final_review,
+        prompt_score_resume,
+        prompt_cover_gaps,
+        prompt_final_score_resume,
     )
     
     logger.info("=" * 50)
@@ -185,8 +195,10 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
     # Step 1: Select best resume
     logger.info("\n[Step 1] Selecting best resume...")
     index_path = resume_index_path or str(Config.RESUME_INDEX_PATH)
-    best_resume, scores = choose_resume_pdf(jd_text, index_path)
+    best_resume, scores, is_low_match = choose_resume_pdf(jd_text, index_path)
     logger.info(f"  → Selected: {best_resume.label}")
+    if is_low_match:
+        logger.warning(f"  → ⚠️ LOW MATCH MODE: Will write responsibilities based on JD")
     
     # Step 2: Extract resume text
     logger.info("\n[Step 2] Extracting resume text from PDF...")
@@ -238,18 +250,27 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
             remaining = [r for r in all_responsibilities if r not in used_responsibilities]
             responsibilities_to_cover = remaining[:3]
         
-        # Call LLM for this role
-        role_output = llm_to_schema(
-            prompt_tailor_role(
+        # Call LLM for this role - use low_match prompt if JD is significantly different
+        if is_low_match:
+            role_prompt = prompt_tailor_role_low_match(
                 jd_json=jd.model_dump(),
                 role=role.model_dump(),
                 role_index=i,
                 total_roles=len(resume.roles),
                 responsibilities_to_cover=responsibilities_to_cover,
                 used_responsibilities=used_responsibilities
-            ),
-            RoleOutput
-        )
+            )
+        else:
+            role_prompt = prompt_tailor_role(
+                jd_json=jd.model_dump(),
+                role=role.model_dump(),
+                role_index=i,
+                total_roles=len(resume.roles),
+                responsibilities_to_cover=responsibilities_to_cover,
+                used_responsibilities=used_responsibilities
+            )
+        
+        role_output = llm_to_schema(role_prompt, RoleOutput)
         
         # CRITICAL: Enforce original company name
         if role_output.company != original_companies[i]:
@@ -325,6 +346,10 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
         location=resume.location,
         linkedin=None,  # TODO: extract from resume if available
         
+        # Target job info
+        target_company=jd.company,
+        target_role=jd.role_title,
+        
         # Tailored content
         tailored_headline=header.headline,
         tailored_summary=header.summary,
@@ -354,22 +379,101 @@ def run_pipeline(jd_text: str, resume_index_path: Optional[str] = None) -> Tailo
         if bullet.needs_revision
     )
     
+    # Step 10: Score resume (Talent Acquisition Manager evaluation)
+    logger.info("\n[Step 10] Scoring resume (Talent Acquisition Manager evaluation)...")
+    score_result = llm_to_schema(
+        prompt_score_resume(tailored.model_dump(), jd.model_dump()),
+        ResumeScoreOutput
+    )
+    logger.info(f"  → Interview Selection Score: {score_result.score}/100")
+    if score_result.gaps:
+        logger.info(f"  → Gaps identified: {len(score_result.gaps)}")
+    
+    # Step 11: Cover gaps by adding new bullet points
+    if score_result.gaps:
+        logger.info("\n[Step 11] Adding bullet points to cover gaps...")
+        gap_coverage = llm_to_schema(
+            prompt_cover_gaps(tailored.model_dump(), score_result.model_dump(), jd.model_dump()),
+            GapCoverageOutput
+        )
+        
+        # Apply the gap coverage additions to the tailored resume
+        new_bullets_added = 0
+        for role_update in gap_coverage.roles_with_additions:
+            # Find the corresponding role in tailored resume
+            if role_update.role_index < len(tailored.tailored_roles):
+                original_role = tailored.tailored_roles[role_update.role_index]
+                
+                # Add only the NEW bullets (is_new=True)
+                for bullet in role_update.bullets:
+                    if bullet.is_new:
+                        new_bullet = TailoredBullet(
+                            text=bullet.text,
+                            source_bullet_ids=[],
+                            needs_revision=bullet.needs_revision,
+                            revision_note=bullet.revision_note
+                        )
+                        original_role.bullets.append(new_bullet)
+                        new_bullets_added += 1
+        
+        logger.info(f"  → Added {new_bullets_added} new bullet(s) to cover gaps")
+        logger.info(f"  → Gaps addressed: {gap_coverage.gaps_addressed}")
+        if gap_coverage.gaps_not_addressable:
+            logger.warning(f"  → Gaps not addressable: {gap_coverage.gaps_not_addressable}")
+    else:
+        logger.info("\n[Step 11] No gaps to cover - skipping gap coverage step")
+        gap_coverage = None
+    
+    # Recount revisions after gap coverage
+    total_revisions = sum(
+        1 for role in tailored.tailored_roles
+        for bullet in role.bullets
+        if bullet.needs_revision
+    )
+    
+    # Step 12: Re-score the final resume after gap coverage
+    logger.info("\n[Step 12] Re-scoring final resume after gap coverage...")
+    
+    # Get the gaps that were addressed (if gap_coverage exists)
+    initial_gaps = score_result.gaps if score_result else []
+    gaps_addressed = gap_coverage.gaps_addressed if gap_coverage else []
+    
+    final_score_result = llm_to_schema(
+        prompt_final_score_resume(
+            tailored.model_dump(), 
+            jd.model_dump(),
+            initial_gaps,
+            gaps_addressed
+        ),
+        ResumeScoreOutput
+    )
+    logger.info(f"  → Final Interview Selection Score: {final_score_result.score}/100")
+    logger.info(f"  → Score improvement: {final_score_result.score - score_result.score} points")
+    
     logger.info("\n" + "=" * 50)
     logger.info("✅ Pipeline completed successfully!")
     logger.info(f"   Roles: {len(tailored.tailored_roles)}")
     logger.info(f"   Bullets needing revision: {total_revisions}")
     logger.info(f"   Gaps to confirm: {len(tailored.gaps_to_confirm)}")
+    logger.info(f"   Initial Score: {score_result.score}/100")
+    logger.info(f"   Final Score: {final_score_result.score}/100")
     logger.info("=" * 50)
     
-    return tailored
+    return tailored, score_result, gap_coverage, final_score_result
 
 
 # =============================================================================
 # OUTPUT
 # =============================================================================
 
-def save_tailored_resume(tailored: TailoredResumeJSON, output_path: Optional[str] = None) -> Path:
-    """Save tailored resume to JSON file."""
+def save_tailored_resume(
+    tailored: TailoredResumeJSON, 
+    score: Optional[ResumeScoreOutput] = None,
+    gap_coverage: Optional[GapCoverageOutput] = None,
+    final_score: Optional[ResumeScoreOutput] = None,
+    output_path: Optional[str] = None
+) -> Path:
+    """Save tailored resume, score, gap coverage, and final score to JSON file."""
     if output_path:
         output_file = Path(output_path)
     else:
@@ -377,9 +481,18 @@ def save_tailored_resume(tailored: TailoredResumeJSON, output_path: Optional[str
     
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
+    # Combine tailored resume with score, gap coverage, and final score data
+    output_data = tailored.model_dump()
+    if score:
+        output_data["score"] = score.model_dump()
+    if gap_coverage:
+        output_data["gap_coverage"] = gap_coverage.model_dump()
+    if final_score:
+        output_data["final_score"] = final_score.model_dump()
+    
     logger.info(f"Saving to: {output_file}")
     with open(output_file, "w", encoding="utf-8") as f:
-        f.write(tailored.model_dump_json(indent=2))
+        json.dump(output_data, f, indent=2)
     
     return output_file
 
@@ -399,10 +512,24 @@ if __name__ == "__main__":
     
     try:
         jd_text = get_job_description(input_source)
-        tailored = run_pipeline(jd_text)
-        output_file = save_tailored_resume(tailored)
+        tailored, score, gap_coverage, final_score = run_pipeline(jd_text)
+        output_file = save_tailored_resume(tailored, score, gap_coverage, final_score)
         
         print(f"\n✅ Tailored resume saved to: {output_file}")
+        
+        # Print score
+        print(f"\n📊 INTERVIEW SELECTION SCORE: {score.score}/100")
+        print(f"   {score.score_rationale}")
+        
+        if score.gaps:
+            print(f"\n🔍 GAPS TO REACH 100/100:")
+            for i, gap in enumerate(score.gaps, 1):
+                print(f"   {i}. {gap}")
+        
+        if score.recommendations:
+            print(f"\n💡 RECOMMENDATIONS:")
+            for i, rec in enumerate(score.recommendations, 1):
+                print(f"   {i}. {rec}")
         
         # Print revision summary
         revision_bullets = []
