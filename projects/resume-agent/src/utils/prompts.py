@@ -81,6 +81,11 @@ IMPORTANT: education must be an array of STRINGS, not objects. Format each as "D
 
 def prompt_tailor_header(jd_json: dict, resume_json: dict) -> str:
     """Tailor headline and summary to match JD. Skills are handled separately."""
+    
+    # Extract tools/platforms for bullet 4
+    tools = jd_json.get('tools_platforms', [])
+    tools_str = ", ".join(tools[:10]) if tools else "relevant tools and platforms"
+    
     return f"""
 {_json_only()}
 
@@ -90,24 +95,57 @@ NOTE: Skills will be handled in a separate step - include empty skills array.
 JOB:
 - Company: {jd_json.get('company', '')}
 - Role: {jd_json.get('role_title', '')}
-- Key responsibilities: {json.dumps(jd_json.get('responsibilities', [])[:5])}
-- Keywords: {json.dumps(jd_json.get('keywords', [])[:10])}
+- Key responsibilities: {json.dumps(jd_json.get('responsibilities', []))}
+- Tools/Platforms: {json.dumps(tools)}
+- Keywords: {json.dumps(jd_json.get('keywords', [])[:15])}
 
 ORIGINAL RESUME:
 - Current headline: {resume_json.get('headline', '')}
-- Current summary: {json.dumps(resume_json.get('summary', resume_json.get('summary_bullets', [])))}
 
 INSTRUCTIONS:
-1. Headline: Brief, impactful, relevant to the job role
-2. Summary: 3-4 bullets highlighting relevant experience
-   - Use JD keywords naturally, but NEVER copy JD sentences verbatim
-   - Paraphrase and rewrite in your own words
-   - Sound like a real professional describing their experience, not a job posting
+
+1. HEADLINE: Brief, impactful, relevant to the job role title
+
+2. SUMMARY: Create 4-5 bullet points following this EXACT structure:
+
+   BULLET 1 (Introduction):
+   "Experienced professional in [job-title-related-to-posting] with over 9 years of experience in B2B, B2C, Ecommerce, SaaS, and gaming industries."
+   - Use a job title that matches the job posting (e.g., "Marketing Technology", "User Acquisition", "Growth Marketing")
+   
+   BULLET 2 (Key Responsibilities - Part 1):
+   - Mix and match the 2-3 MOST IMPORTANT responsibilities from the job description
+   - Paraphrase, do NOT copy verbatim
+   - Make it sound like your experience, not a job requirement
+   
+   BULLET 3 (Key Responsibilities - Part 2):
+   - Cover another 2-3 important responsibilities from the job description
+   - Again, paraphrase and present as your experience
+   
+   BULLET 4 (Tools & Technologies):
+   - Cover the most important tools, technologies, and platforms from the JD
+   - Example: "Proficient in [Tool1], [Tool2], [Tool3], and [Tool4] for [purpose]."
+   - Use tools from JD: {tools_str}
+   
+   BULLET 5 (Optional - Additional Coverage):
+   - If there are more important JD responsibilities not covered, add a 5th bullet
+   - Skip if bullets 2-3 already covered the main responsibilities
+
+CRITICAL RULES:
+- NEVER copy job description language verbatim
+- Sound like a professional describing their experience, NOT a job posting
+- Each bullet should be 1-2 sentences max
+- Bullet 1 MUST follow the exact format given
 
 OUTPUT:
 {{
   "headline": "",
-  "summary": ["...", "...", "..."],
+  "summary": [
+    "Experienced professional in ... with over 9 years of experience in B2B, B2C, Ecommerce, SaaS, and gaming industries.",
+    "...",
+    "...",
+    "Proficient in ... for ...",
+    "..."
+  ],
   "skills": []
 }}
 """.strip()
